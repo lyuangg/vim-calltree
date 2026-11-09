@@ -117,7 +117,7 @@ function! calltree#open(mode) abort
         \ 'path': l:srcpath, 'lnum': l:cursor[0], 'col': l:cursor[1]})
   let l:ctx['bufnr'] = winbufnr(l:layout['tree'])
   let l:ctx['own_tab'] = l:layout['own_tab']
-  " <CR> / e open files back in the window :CallTree was invoked from.
+  " e opens files back in the window :CallTree was invoked from.
   let l:ctx['openwin'] = l:srcwin
   if l:layout['viewer']
     " A dedicated tab brings its own viewer; the window :CallTree was invoked

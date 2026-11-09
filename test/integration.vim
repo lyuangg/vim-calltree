@@ -81,6 +81,17 @@ while s:waited < 200
 endwhile
 call writefile(getbufline(s:treebuf, 1, '$'), s:dir . '/ordered.txt')
 
+" K: the floating window shows the whole declaration, not just the name.  The
+" root of this tree is a multi-line function, so the item range is doing the
+" work here.
+call win_gotoid(win_findbuf(s:treebuf)[0])
+call cursor(1, 1)
+call calltree#action#float()
+if !empty(popup_list())
+  call writefile(getbufline(winbufnr(popup_list()[0]), 1, '$'), s:dir . '/float.txt')
+  call popup_close(popup_list()[0])
+endif
+
 " fmt.Println must be painted with the stdlib group
 let s:stdlib_line = search(' Println')
 if s:stdlib_line > 0
@@ -98,4 +109,12 @@ call win_gotoid(win_findbuf(s:treebuf)[0])
 call cursor(search('▸ third'), 1)
 call calltree#action#preview()
 call writefile(['preview_third=' . getcurpos(s:srcwin)[1]], s:dir . '/preview.txt')
+
+" q in the viewer window leaves the whole tree tab, exactly like q in the tree.
+let s:tabs = tabpagenr('$')
+call win_gotoid(s:srcwin)
+let s:viewer_q = maparg('q', 'n')
+call feedkeys('q', 'x')
+call writefile(['qmap=' . s:viewer_q,
+      \ 'closed=' . (tabpagenr('$') == s:tabs - 1)], s:dir . '/viewer-q.txt')
 qa!

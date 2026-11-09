@@ -216,7 +216,7 @@ endfunction
 " One function can be called from several places; ]c / [c walk them.
  " --- open ------------------------------------------------------------------
 "
-" <CR> / e: open the node in the window :CallTree was invoked from and stay
+" e: open the node in the window :CallTree was invoked from and stay
 " there.  This is the "take me to the code" action, as opposed to preview and
 " g<CR>, which never leave the tree tab.
 
@@ -240,7 +240,7 @@ endfunction
 " --- preview ---------------------------------------------------------------
 "
 " While the cursor moves through the tree (j/k included) the source window
-" follows along, so you can read code without pressing <CR>.  Focus never
+" follows along, so you can read code without pressing `e`.  Focus never
 " leaves the tree; "preview" is a read, not a jump.
 
 function! calltree#action#preview_schedule() abort
@@ -311,6 +311,12 @@ function! calltree#action#_preview(path, lnum, col) abort
     setlocal nonumber norelativenumber nolist nowrap nospell
     let b:calltree_preview = 1
     let b:calltree_preview_sig = ''
+    " The viewer is read-only, so `q` would otherwise start recording a macro.
+    " Leave the tree layout instead, like `q` does from the tree window.
+    nnoremap <buffer> <silent> <Plug>(calltree-close) :<C-u>call calltree#action#close()<CR>
+    if get(g:, 'calltree_default_maps', 1)
+      nmap <buffer> q <Plug>(calltree-close)
+    endif
   endif
 
   let l:path = fnamemodify(a:path, ':p')
@@ -369,6 +375,134 @@ let s:filetypes = {
 
 function! s:preview_filetype(path) abort
   return get(s:filetypes, tolower(fnamemodify(a:path, ':e')), '')
+endfunction
+
+" --- floating definition ---------------------------------------------------
+"
+" K peeks at the definition in a popup window: no window is entered, the viewer
+" keeps whatever it was showing and nothing is opened.  Content follows the
+" preview buffer's rules (a loaded buffer first, so unsaved edits show up).
+
+let s:floats = {}
+
+function! calltree#action#float() abort
+  let l:node = calltree#action#node()
+  if empty(l:node) || l:node['group'] || get(l:node, 'message', 0) || empty(l:node['uri'])
+    return
+  endif
+  if !has('popupwin')
+    " No floating windows in this build: the viewer is the next best thing.
+    return calltree#action#preview()
+  endif
+
+  let l:path = lsp#utils#uri_to_path(l:node['uri'])
+  let l:lines = s:preview_lines(l:path)
+  if empty(l:lines)
+    return s:err('cannot read ' . fnamemodify(l:path, ':t'))
+  endif
+
+  " CallHierarchyItem.range covers the whole declaration (doc comment,
+  " signature, body).  Servers that only report the name get a few lines of
+  " context instead, which beats a one-line popup.
+  let l:first = l:node['sel']['start']['line'] + 1
+  let l:last = l:first
+  let l:range = get(l:node['item'], 'range', {})
+  if !empty(l:range)
+    " The doc comment above the signature belongs to the definition.
+    let l:first = min([l:first, l:range['start']['line'] + 1])
+    let l:last = l:range['end']['line'] + 1
+  endif
+  if l:last <= l:first
+    let l:first = max([1, l:first - 2])
+    let l:last = l:first + 9
+  endif
+  let l:first = min([l:first, len(l:lines)])
+  let l:last = min([l:last, l:first + 499, len(l:lines)])
+
+  let l:body = l:lines[l:first - 1 : l:last - 1]
+  " A range ending on the blank lines after a closing brace wastes popup rows.
+  while len(l:body) > 1 && l:body[-1] =~# '^\s*$'
+    call remove(l:body, -1)
+  endwhile
+
+  call s:float_open(l:node, l:path, l:first, l:body)
+endfunction
+
+function! s:float_open(node, path, first, body) abort
+  let l:bufnr = bufadd('')
+  call bufload(l:bufnr)
+  call setbufvar(l:bufnr, '&buftype', 'nofile')
+  call setbufvar(l:bufnr, '&bufhidden', 'wipe')
+  call setbufvar(l:bufnr, '&swapfile', 0)
+  call setbufvar(l:bufnr, '&buflisted', 0)
+  call setbufline(l:bufnr, 1, a:body)
+  call setbufvar(l:bufnr, '&modified', 0)
+  let l:ft = s:preview_filetype(a:path)
+  if !empty(l:ft)
+    call setbufvar(l:bufnr, '&filetype', l:ft)
+  endif
+
+  " Fit the content, then cap: taller bodies page with <C-d> / <C-u>.
+  let l:natural = 0
+  for l:line in a:body
+    let l:natural = max([l:natural, strdisplaywidth(l:line)])
+  endfor
+  let l:width = max([20, min([l:natural + 2, calltree#cfg('float_width', 100),
+        \ &columns - 2])])
+  let l:height = min([len(a:body), calltree#cfg('float_height', 20)])
+
+  let l:id = popup_atcursor(l:bufnr, {
+        \ 'minwidth': l:width, 'maxwidth': l:width,
+        \ 'minheight': l:height, 'maxheight': l:height,
+        \ 'border': [], 'padding': [0, 1, 0, 1],
+        \ 'wrap': 0, 'zindex': 300, 'scrollbar': 1, 'mapping': 0,
+        \ 'moved': 'any', 'close': 'click',
+        \ 'title': ' ' . a:node['name'] . '  '
+        \          . fnamemodify(a:path, ':t') . ':' . a:first . ' ',
+        \ 'filter': function('s:float_filter'),
+        \ 'callback': function('s:float_closed'),
+        \ })
+  let s:floats[l:id] = {'total': len(a:body)}
+endfunction
+
+" Cursor keys keep working on the tree: the popup closes itself and the key
+" still reaches the tree, so the cursor (and the preview) moves on as usual.
+" "moved": "any" is the safety net for any other cursor movement.  Page keys
+" page through a definition that does not fit, and any other key is swallowed
+" after closing.  "mapping" is off on the popup so the tree's own mappings
+" cannot fire underneath it.
+function! s:float_filter(id, key) abort
+  if a:key ==# 'j' || a:key ==# 'k' || a:key ==# "\<Down>" || a:key ==# "\<Up>"
+        \ || a:key ==# "\<C-n>" || a:key ==# "\<C-p>"
+    call popup_close(a:id)
+    return 0
+  endif
+
+  let l:step = 0
+  if a:key ==# "\<C-d>" || a:key ==# "\<PageDown>"
+    let l:step = 10
+  elseif a:key ==# "\<C-u>" || a:key ==# "\<PageUp>"
+    let l:step = -10
+  endif
+
+  let l:pos = popup_getpos(a:id)
+  let l:total = get(get(s:floats, a:id, {}), 'total', 0)
+  if l:step == 0 || empty(l:pos) || l:total == 0
+    call popup_close(a:id)
+    return 1
+  endif
+
+  let l:first = l:pos['firstline'] + l:step
+  call popup_setoptions(a:id, {
+        \ 'firstline': max([1, min([l:first, l:total - l:pos['core_height'] + 1])]),
+        \ })
+  return 1
+endfunction
+
+function! s:float_closed(id, result) abort
+  if has_key(s:floats, a:id)
+    call remove(s:floats, a:id)
+  endif
 endfunction
 
 function! calltree#action#cycle_site(step) abort

@@ -80,6 +80,25 @@ case "$preview_text" in
 esac
 echo "preview line $preview_line: $preview_text"
 
+# K shows the whole function declaration in a floating window
+grep -q 'func ordered() {' "$work/float.txt" || {
+  echo "float popup missing the signature: $(head -3 "$work/float.txt" 2>/dev/null)"
+  exit 1
+}
+grep -q '}' "$work/float.txt" || { echo "float popup missing the body end"; exit 1; }
+echo "float popup: ok"
+
+# q in the preview window closes the tree tab
+grep -q '^qmap=<Plug>(calltree-close)' "$work/viewer-q.txt" || {
+  echo "preview window q mapping: $(cat "$work/viewer-q.txt" 2>/dev/null)"
+  exit 1
+}
+grep -q '^closed=1' "$work/viewer-q.txt" || {
+  echo "q in the preview window did not close the tree tab"
+  exit 1
+}
+echo "preview window q: ok"
+
 # standard library nodes are painted with their own highlight group
 grep -q 'calltree_stdlib' "$work/stdlib.txt" || {
   echo "stdlib node not highlighted: $(cat "$work/stdlib.txt" 2>/dev/null)"

@@ -29,12 +29,13 @@ CONTENTS                                             *calltree-contents*
 ==============================================================================
 2. 键位                                                *calltree-maps*
 
-<CR>     真实打开该文件到定义处，并切回 :CallTree 所在的编辑窗口（离开树 tab）。
-e        同 <CR>。光标移动（j/k/gg/G/搜索）本身就会在右侧窗口预览，
-         焦点留在树里。
+<CR>     展开 / 折叠光标所在的节点，同 o。
+o        同 <CR>。展开时才向服务器发请求，已加载的节点只切换显示。
+e        真实打开该文件到定义处，并切回 :CallTree 所在的编辑窗口（离开树 tab）。
+         光标移动（j/k/gg/G/搜索）本身就会在右侧窗口预览，焦点留在树里。
 g<CR>    在预览窗口显示函数定义，不离开树 tab。
 gs       在预览窗口显示调用点（服务器返回的 fromRanges）。
-o        展开 / 折叠光标所在的节点。展开时才向服务器发请求。
+K        在浮动窗口里预览该函数的定义。
 L        整棵可见树再展开一层；作用范围是当前可见的所有节点。
 <BS>     跳到父节点所在行。
 ]c [c    同一函数的多个调用点之间循环。
@@ -44,8 +45,10 @@ q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
 
 所有映射都通过 |<Plug>| 提供，设置 g:calltree_default_maps = 0 可禁用默认键位：
 
+  <Plug>(calltree-open)
   <Plug>(calltree-jump)
   <Plug>(calltree-jump-site)
+  <Plug>(calltree-float)
   <Plug>(calltree-toggle)
   <Plug>(calltree-expand-level)
   <Plug>(calltree-parent)
@@ -90,6 +93,8 @@ g:calltree_preview          光标在树里移动时是否自动预览源码，�
 g:calltree_preview_site     预览定位到调用点而不是定义，默认 1。
 g:calltree_preview_max_bytes 超过该字节数的文件不预览内容，默认 2097152。
 g:calltree_preview_delay    预览防抖毫秒数，默认 60。
+g:calltree_float_height     K 浮动窗口的最大高度（行），默认 20。
+g:calltree_float_width      K 浮动窗口的最大宽度（单元格），默认 100。
 g:calltree_default_maps     是否安装默认键位，默认 1。
 
 ==============================================================================

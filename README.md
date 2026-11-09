@@ -56,10 +56,11 @@ All mappings are buffer-local to the tree and available as `<Plug>`.
 
 | Key | `<Plug>` | Action |
 | --- | --- | --- |
-| `<CR>`, `e` | `(calltree-open)` | Open the file at its definition in the window `:CallTree` was run from |
+| `<CR>`, `o` | `(calltree-toggle)` | Expand or collapse the node under the cursor |
+| `e` | `(calltree-open)` | Open the file at its definition in the window `:CallTree` was run from |
 | `g<CR>` | `(calltree-jump)` | Show the definition in the preview window |
 | `gs` | `(calltree-jump-site)` | Show the call site in the preview window |
-| `o` | `(calltree-toggle)` | Expand or collapse the node under the cursor |
+| `K` | `(calltree-float)` | Show the definition in a floating window |
 | `L` | `(calltree-expand-level)` | Expand the visible tree by one level |
 | `]c` / `[c` | `(calltree-next-site)` / `(calltree-prev-site)` | Next / previous call site of the node |
 | `<BS>` | `(calltree-parent)` | Move to the parent node |
@@ -133,6 +134,8 @@ vimrc. They are reapplied on `ColorScheme` and on `:set background`.
 | `g:calltree_preview_site` | `1` | Preview the call site instead of the definition |
 | `g:calltree_preview_delay` | `60` | Preview debounce in milliseconds |
 | `g:calltree_preview_max_bytes` | `2097152` | Files larger than this are not previewed |
+| `g:calltree_float_height` | `20` | Maximum height of the `K` popup in lines; longer bodies page with `<C-d>`/`<C-u>` |
+| `g:calltree_float_width` | `100` | Maximum width of the `K` popup in cells |
 | `g:calltree_default_maps` | `1` | Install the default keys. `0` provides only `<Plug>` |
 
 ## Limitations

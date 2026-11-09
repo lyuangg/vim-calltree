@@ -77,6 +77,7 @@ function! calltree#view#InitMaps() abort
   nnoremap <buffer> <silent> <Plug>(calltree-jump)      :<C-u>call calltree#action#jump(0)<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-open)      :<C-u>call calltree#action#open()<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-jump-site) :<C-u>call calltree#action#jump(1)<CR>
+  nnoremap <buffer> <silent> <Plug>(calltree-float)     :<C-u>call calltree#action#float()<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-toggle)    :<C-u>call calltree#action#toggle()<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-expand-level) :<C-u>call calltree#action#expand_level()<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-parent)    :<C-u>call calltree#action#parent()<CR>
@@ -89,11 +90,14 @@ function! calltree#view#InitMaps() abort
   if !get(g:, 'calltree_default_maps', 1)
     return
   endif
-  nmap <buffer> <CR>   <Plug>(calltree-open)
+  " <CR> is the key you press without thinking, so it deepens the tree like
+  " `o` does; leaving the tree stays on `e` and `g<CR>`.
+  nmap <buffer> <CR>   <Plug>(calltree-toggle)
+  nmap <buffer> o      <Plug>(calltree-toggle)
   nmap <buffer> e      <Plug>(calltree-open)
   nmap <buffer> g<CR>  <Plug>(calltree-jump)
   nmap <buffer> gs     <Plug>(calltree-jump-site)
-  nmap <buffer> o      <Plug>(calltree-toggle)
+  nmap <buffer> K      <Plug>(calltree-float)
   nmap <buffer> L      <Plug>(calltree-expand-level)
   nmap <buffer> <BS>   <Plug>(calltree-parent)
   nmap <buffer> q      <Plug>(calltree-close)

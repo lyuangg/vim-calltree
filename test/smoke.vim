@@ -127,6 +127,81 @@ let s:root['children'] = []
 call calltree#view#Render(bufnr('%'))
 call s:check('root collapse leaves one line', line('$') == 1)
 
+" K: the floating definition shows the declaration range, hides itself as soon
+" as the tree cursor moves, and does not leak its scratch buffer.
+if has('popupwin')
+  let s:tmpfile = tempname()
+  let s:srclines = ['package x', '', '// doc comment']
+  for s:i in range(1, 12)
+    call add(s:srclines, "\tline" . s:i)
+  endfor
+  call add(s:srclines, '}')
+  call writefile(s:srclines, s:tmpfile)
+
+  let s:float_item = {
+        \ 'name': 'f', 'kind': 12, 'uri': lsp#utils#path_to_uri(s:tmpfile),
+        \ 'range': {'start': {'line': 2, 'character': 0}, 'end': {'line': 14, 'character': 1}},
+        \ 'selectionRange': {'start': {'line': 2, 'character': 6}, 'end': {'line': 2, 'character': 7}},
+        \ }
+  let s:froot = calltree#new_node(s:float_item, 'root')
+  let s:froot['loaded'] = 1
+  let s:froot['expanded'] = 1
+  " A second line, so that j/k can actually move the tree cursor.
+  let s:fchild = calltree#new_node(s:float_item, 'out')
+  let s:fchild['parent'] = s:froot
+  let s:fchild['loaded'] = 1
+  let s:froot['children'] = [s:fchild]
+
+  enew
+  setlocal buftype=nofile
+  let b:calltree = {'gen': 2, 'bufnr': bufnr('%'), 'root': s:froot, 'index': {},
+        \ 'srcbufnr': bufnr('%'), 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
+  call setbufvar(bufnr('%'), 'calltree_gen', 2)
+  call calltree#view#Render(bufnr('%'))
+
+  let g:calltree_float_height = 6
+  call calltree#action#float()
+  let s:pops = popup_list()
+  call s:check('float opens a popup', len(s:pops) == 1)
+  let s:pwin = get(s:pops, 0, 0)
+  let s:pfbuf = winbufnr(s:pwin)
+  call s:check('float starts at the declaration range',
+        \ get(getbufline(s:pfbuf, 1), 0, '') ==# '// doc comment')
+  call s:check('float caps its height', popup_getpos(s:pwin)['core_height'] == 6)
+
+  " Page keys page through a definition that does not fit.
+  call feedkeys("\<C-d>", 'x')
+  call s:check('page scrolling stays inside the popup',
+        \ popup_getpos(s:pwin)['firstline'] == 8 && line('.') == 1)
+
+  " j moves the tree and the popup hides itself ("moved": "any").
+  call feedkeys('j', 'x')
+  call s:check('j moves the tree and closes the popup',
+        \ empty(popup_list()) && line('.') == 2)
+
+  " A key that is not a cursor movement dismisses the popup without reaching
+  " the tree.
+  call cursor(1, 1)
+  call calltree#action#float()
+  let s:pfbuf2 = winbufnr(get(popup_list(), 0, 0))
+  call feedkeys('x', 'x')
+  call s:check('any other key closes the popup',
+        \ empty(popup_list()) && line('.') == 1)
+  call s:check('the popup buffer is wiped', !bufloaded(s:pfbuf2))
+  unlet g:calltree_float_height
+endif
+
+" The viewer buffer is read-only: q must leave the tree layout, not start a
+" macro recording.
+enew
+setlocal buftype=nofile
+let s:prevfile = tempname()
+call writefile(['package x', 'func f() {}'], s:prevfile)
+call calltree#action#_preview(s:prevfile, 1, 1)
+call s:check('preview buffer shows the file', getline(1) ==# 'package x')
+call s:check('preview buffer maps q to close the tree',
+      \ maparg('q', 'n') ==# '<Plug>(calltree-close)')
+
 " Position conversion, the part every jump depends on.
 enew
 call setline(1, ['<?php', '    $x = 中文; handle($x);'])

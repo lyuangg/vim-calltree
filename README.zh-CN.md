@@ -54,10 +54,11 @@ Plug 'lyuangg/vim-calltree'
 
 | 键 | `<Plug>` | 说明 |
 | --- | --- | --- |
-| `<CR>`、`e` | `(calltree-open)` | 在执行 `:CallTree` 的窗口中打开该文件并定位到定义 |
+| `<CR>`、`o` | `(calltree-toggle)` | 展开或折叠光标所在节点 |
+| `e` | `(calltree-open)` | 在执行 `:CallTree` 的窗口中打开该文件并定位到定义 |
 | `g<CR>` | `(calltree-jump)` | 在预览窗口显示函数定义 |
 | `gs` | `(calltree-jump-site)` | 在预览窗口显示调用点 |
-| `o` | `(calltree-toggle)` | 展开或折叠光标所在节点 |
+| `K` | `(calltree-float)` | 在浮动窗口中预览函数定义 |
 | `L` | `(calltree-expand-level)` | 将可见部分再展开一层 |
 | `]c`、`[c` | `(calltree-next-site)`、`(calltree-prev-site)` | 切换到下一个 / 上一个调用点 |
 | `<BS>` | `(calltree-parent)` | 跳到父节点 |
@@ -127,6 +128,8 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `g:calltree_preview_site` | `1` | 预览调用点而非定义 |
 | `g:calltree_preview_delay` | `60` | 预览防抖，单位毫秒 |
 | `g:calltree_preview_max_bytes` | `2097152` | 超过该字节数的文件不预览内容 |
+| `g:calltree_float_height` | `20` | `K` 浮窗的最大高度（行），超出部分用 `<C-d>`/`<C-u>` 翻页 |
+| `g:calltree_float_width` | `100` | `K` 浮窗的最大宽度（单元格） |
 | `g:calltree_default_maps` | `1` | 安装默认键位。`0` 仅提供 `<Plug>` |
 
 ## 限制
