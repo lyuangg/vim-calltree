@@ -3,9 +3,10 @@
 English | [中文](README.zh-CN.md)
 
 Call hierarchy tree for Vim. Shows who calls the function under the cursor and
-what it calls, as a lazily expanded tree with a source preview, backed by
-[vim-lsp](https://github.com/prabirshrestha/vim-lsp) and the LSP 3.16 call
-hierarchy protocol.
+what it calls, as a lazily expanded tree with a source preview. LSP languages
+use [vim-lsp](https://github.com/prabirshrestha/vim-lsp) and the LSP 3.16 call
+hierarchy protocol; PHP uses the server's `definition`/`references` where
+available and falls back to static search.
 
 ```
 ● mid  main.go:7
@@ -22,6 +23,8 @@ hierarchy protocol.
   `g:lsp_use_native_client = 1`.
 - vim-lsp.
 - A language server implementing `callHierarchyProvider`. Verified with gopls.
+- For PHP: ripgrep (`rg`) or `ag` on `$PATH`; a PHP language server is
+  optional.
 
 ## Installation
 
@@ -37,6 +40,25 @@ the identifier, as required by `textDocument/prepareCallHierarchy`.
 
 The tree opens in a new tab: tree on the left, source preview on the right. The
 original tab is not modified.
+
+### PHP
+
+PHP language servers generally do not implement call hierarchy. The plugin uses
+`textDocument/definition` and `textDocument/references` when a server is
+available, enumerates callees from the source, and falls back to `rg`/`ag`
+search when the server cannot answer.
+
+`g:calltree_php_provider` selects the backend:
+
+| Value | Behaviour |
+| --- | --- |
+| `'auto'` | Server first, search fallback (default) |
+| `'lsp'` | Server only, no search fallback |
+| `'search'` | Search only, no server required |
+
+In search mode, callers are matched by class and visibility rather than by
+name alone. The workspace root is the nearest ancestor containing `.git` or
+`composer.json`.
 
 ### Commands
 
@@ -100,6 +122,7 @@ server:
 | `↻` | Cycle, ancestor already contains this function |
 | `×N` | Called from N places |
 | `…+N` | N distinct symbols omitted by `g:calltree_max_children` |
+| `…+?` | PHP search cap reached; the number of omitted symbols is unknown |
 
 ### Highlight groups
 
@@ -112,6 +135,7 @@ server:
 | `CallTreeExternal` | Third-party code (module cache, `vendor/`) | amber |
 | `CallTreeCycle` | Cycle marker | bold orange |
 | `CallTreeLoading` | Pending request | italic grey |
+| `CallTreeUnresolved` | PHP symbol with no definition in the search root | italic grey |
 | `CallTreeCount` | `×N`, `…+N` | purple |
 | `CallTreeLocation` | File path | grey |
 | `CallTreeLine` | Line number | links to `LineNr` |
@@ -137,6 +161,15 @@ vimrc. They are reapplied on `ColorScheme` and on `:set background`.
 | `g:calltree_float_height` | `20` | Maximum height of the `K` popup in lines; longer bodies page with `<C-d>`/`<C-u>` |
 | `g:calltree_float_width` | `100` | Maximum width of the `K` popup in cells |
 | `g:calltree_default_maps` | `1` | Install the default keys. `0` provides only `<Plug>` |
+| `g:calltree_php_provider` | `'auto'` | `'auto'` (server + search fallback), `'lsp'` (server only), `'search'` |
+| `g:calltree_php_references_fallback` | `1` | In `'auto'` mode, fall back to search when `references` returns nothing (server still indexing) |
+| `g:calltree_php_callee_definition` | `1` | Resolve each callee call site with `textDocument/definition` |
+| `g:calltree_php_engine` | `'auto'` | `'rg'`, `'ag'`, or `'auto'` |
+| `g:calltree_php_max_results` | `300` | Maximum raw matches read per search |
+| `g:calltree_php_timeout` | `15000` | Search timeout in milliseconds |
+| `g:calltree_php_max_bytes` | `2097152` | Files larger than this are not parsed |
+| `g:calltree_php_ignore` | `['vendor', 'node_modules']` | Directories skipped by call-site searches |
+| `g:calltree_php_globs` | `['*.php', '*.phtml']` | File globs searched for PHP call sites |
 
 ## Limitations
 
@@ -145,6 +178,14 @@ vimrc. They are reapplied on `ColorScheme` and on `:set background`.
 - Every expansion is a separate request. Press `r` after changing code.
 - Callers and callees are limited to `g:calltree_max_children` per node; the
   remainder is reported as `…+N`.
+- PHP callers use `textDocument/references` when a server is available. Search
+  mode matches by class and visibility; aliased class names and calls through
+  variables remain approximate.
+- PHP callees are enumerated from the source and resolved by definition when
+  available, otherwise by name.
+- PHP dynamic calls, trait methods without a same-file definition, and
+  `use function` aliases are not resolved. Search reads files from disk and is
+  capped by `g:calltree_php_max_results` (`…+?`).
 
 ## Tests
 
@@ -154,4 +195,10 @@ vim -Nu NONE -es -S test/smoke.vim && cat test/smoke.log
 
 # End to end against gopls
 test/integration.sh
+
+# PHP search backend: parser checks and a fixture project (needs rg or ag)
+test/php.sh
+
+# PHP + intelephense: definition/references path (skips when not installed)
+test/php_lsp.sh
 ```

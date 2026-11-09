@@ -16,6 +16,7 @@ let s:highlights = {
       \ 'calltree_stdlib':   'CallTreeStdlib',
       \ 'calltree_external': 'CallTreeExternal',
       \ 'calltree_loading': 'CallTreeLoading',
+      \ 'calltree_unresolved': 'CallTreeUnresolved',
       \ 'calltree_count':   'CallTreeCount',
       \ 'calltree_loc':     'CallTreeLocation',
       \ 'calltree_lnum':    'CallTreeLine',
@@ -45,6 +46,7 @@ function! calltree#view#InitHighlights() abort
   execute 'highlight default CallTreeDirOut guifg=' . l:callee[0] . ' ctermfg=' . l:callee[1] . ' gui=bold cterm=bold'
   execute 'highlight default CallTreeCycle guifg=' . l:cycle[0] . ' ctermfg=' . l:cycle[1] . ' gui=bold cterm=bold'
   execute 'highlight default CallTreeLoading guifg=' . l:dim[0] . ' ctermfg=' . l:dim[1] . ' gui=italic cterm=italic'
+  execute 'highlight default CallTreeUnresolved guifg=' . l:dim[0] . ' ctermfg=' . l:dim[1] . ' gui=italic cterm=italic'
   execute 'highlight default CallTreeCount guifg=' . l:count[0] . ' ctermfg=' . l:count[1]
   execute 'highlight default CallTreeStdlib guifg=' . l:std[0] . ' ctermfg=' . l:std[1] . ' gui=italic cterm=italic'
   execute 'highlight default CallTreeExternal guifg=' . l:ext[0] . ' ctermfg=' . l:ext[1]
@@ -308,6 +310,11 @@ function! s:line(node, depth, root_dir) abort
     if a:node['loaded']
       call add(l:pieces, ['calltree_count', ' (' . len(a:node['children']) . ')'])
     endif
+    if a:node['truncated']
+      call add(l:pieces, ['calltree_count', ' …+' . a:node['hidden']])
+    elseif get(a:node, 'overflow', 0)
+      call add(l:pieces, ['calltree_count', ' …+?'])
+    endif
   elseif get(a:node, 'message', 0)
     call add(l:pieces, ['calltree_err', a:node['name']])
   else
@@ -317,10 +324,16 @@ function! s:line(node, depth, root_dir) abort
     endif
     if a:node['truncated']
       call add(l:pieces, ['calltree_count', ' …+' . a:node['hidden']])
+    elseif get(a:node, 'overflow', 0)
+      call add(l:pieces, ['calltree_count', ' …+?'])
     endif
-    call add(l:pieces, ['', '  '])
-    call add(l:pieces, ['calltree_loc', s:location(a:node, a:root_dir)])
-    call add(l:pieces, ['calltree_lnum', ':' . (a:node['sel']['start']['line'] + 1)])
+    " Search-backed nodes can be unresolved (PHP built-ins, dynamic calls):
+    " they still name the call but have no location to show.
+    if !empty(a:node['uri'])
+      call add(l:pieces, ['', '  '])
+      call add(l:pieces, ['calltree_loc', s:location(a:node, a:root_dir)])
+      call add(l:pieces, ['calltree_lnum', ':' . (a:node['sel']['start']['line'] + 1)])
+    endif
   endif
 
   if !empty(a:node['error']) && !get(a:node, 'message', 0)
@@ -343,6 +356,9 @@ function! s:name_group(node) abort
   endif
   if a:node['dir'] ==# 'root'
     return 'calltree_root'
+  endif
+  if empty(a:node['uri'])
+    return 'calltree_unresolved'
   endif
 
   let l:kind = calltree#classify#kind(a:node['uri'])
@@ -368,6 +384,9 @@ function! s:marker(node) abort
   endif
   if a:node['dir'] ==# 'root'
     return '●'
+  endif
+  if empty(a:node['uri'])
+    return '·'
   endif
   if a:node['loaded'] && empty(a:node['children'])
     return '·'

@@ -23,6 +23,11 @@ endfunction
 " Identity of a symbol across servers and directions.  Two CallHierarchyItems
 " for the same function always share uri + selectionRange.start.
 function! calltree#item_key(item) abort
+  " Search-backed providers can name a call without knowing where it is
+  " defined; the name is the only identity those nodes have.
+  if empty(get(a:item, 'uri', ''))
+    return 'sym:' . get(a:item, 'name', '')
+  endif
   let l:start = a:item['selectionRange']['start']
   return a:item['uri'] . '#' . l:start['line'] . ':' . l:start['character']
 endfunction
@@ -48,6 +53,7 @@ function! calltree#new_node(item, dir) abort
         \ 'cycle': 0,
         \ 'truncated': 0,
         \ 'hidden': 0,
+        \ 'overflow': 0,
         \ 'site_idx': -1,
         \ 'error': '',
         \ 'group': 0,
@@ -82,9 +88,24 @@ function! calltree#open(mode) abort
     return s:err('open a source file first')
   endif
 
-  let l:server = calltree#provider#vimlsp#FindServer(bufnr('%'))
-  if empty(l:server)
-    return s:err('no vim-lsp server with callHierarchyProvider for this buffer')
+  let l:provider = calltree#provider#Choose(bufnr('%'))
+  if empty(l:provider)
+    return s:err('no PHP language server is configured for this buffer')
+  endif
+  let l:server = ''
+  if l:provider ==# 'vimlsp' || l:provider ==# 'phplsp'
+    let l:server = calltree#provider#vimlsp#FindServer(bufnr('%'))
+    if empty(l:server)
+      if l:provider ==# 'phplsp'
+        " The server disappeared between Choose() and here; search still works.
+        let l:provider = 'search'
+      else
+        return s:err('no vim-lsp server with callHierarchyProvider for this buffer')
+      endif
+    endif
+  endif
+  if l:provider ==# 'search' && !calltree#provider#search#Available()
+    return s:err('PHP search needs ripgrep (rg) or ag on $PATH')
   endif
 
   let l:srcbufnr = bufnr('%')
@@ -92,9 +113,15 @@ function! calltree#open(mode) abort
   let l:cursor = [line('.'), col('.')]
   let l:pos = lsp#utils#position#vim_to_lsp(l:srcbufnr, l:cursor)
   " Paths in the tree are shown relative to the workspace root; for gopls that
-  " is the module root, which is what you want when reading a big repo.
-  let l:root_uri = lsp#get_server_root_uri(l:server)
-  let l:root_dir = empty(l:root_uri) ? getcwd() : lsp#utils#uri_to_path(l:root_uri)
+  " is the module root, and for the PHP search backend the nearest .git or
+  " composer.json above the file.
+  if l:provider ==# 'vimlsp'
+    let l:root_uri = lsp#get_server_root_uri(l:server)
+    let l:root_dir = empty(l:root_uri) ? getcwd() : lsp#utils#uri_to_path(l:root_uri)
+  else
+    " PHP: the project root, whether the callers come from the server or rg.
+    let l:root_dir = calltree#provider#search#RootDir(l:srcbufnr)
+  endif
   let l:srcwin = exists('w:calltree')
         \ ? get(get(b:, 'calltree', {}), 'srcwin', win_getid())
         \ : win_getid()
@@ -102,6 +129,7 @@ function! calltree#open(mode) abort
   let s:generation += 1
   let l:ctx = {
         \ 'gen': s:generation,
+        \ 'provider': l:provider,
         \ 'server': l:server,
         \ 'srcbufnr': l:srcbufnr,
         \ 'srcwin': l:srcwin,
@@ -155,7 +183,8 @@ function! s:load(ctx) abort
   let l:ctx['root'] = {}
   let l:ctx['index'] = {}
   call calltree#view#Render(l:ctx['bufnr'])
-  call calltree#provider#vimlsp#Prepare(l:ctx['server'], l:ctx['srcbufnr'], l:ctx['pos'],
+  call calltree#provider#Prepare(get(l:ctx, 'provider', 'vimlsp'),
+        \ get(l:ctx, 'server', ''), l:ctx['srcbufnr'], l:ctx['pos'],
         \ function('s:on_prepared', [l:ctx]))
 endfunction
 
@@ -168,9 +197,11 @@ function! s:on_prepared(ctx, result, error) abort
   " The real workspace root only exists after initialize, and this callback
   " runs after the first request completed, so pick it up here.  Without this
   " every path would be absolute whenever :CallTree was not run from the repo.
-  let l:root_uri = lsp#get_server_root_uri(l:ctx['server'])
-  if !empty(l:root_uri)
-    let l:ctx['root_dir'] = lsp#utils#uri_to_path(l:root_uri)
+  if get(l:ctx, 'provider', 'vimlsp') ==# 'vimlsp'
+    let l:root_uri = lsp#get_server_root_uri(l:ctx['server'])
+    if !empty(l:root_uri)
+      let l:ctx['root_dir'] = lsp#utils#uri_to_path(l:root_uri)
+    endif
   endif
 
   if !empty(a:error)
@@ -239,6 +270,11 @@ function! calltree#expand(node, ctx) abort
     let l:node['expanded'] = !l:node['expanded']
     return calltree#view#Render(l:ctx['bufnr'])
   endif
+  " A node without a location has no body to scan; it is a leaf.
+  if empty(l:node['uri'])
+    let l:node['loaded'] = 1
+    return calltree#view#Render(l:ctx['bufnr'])
+  endif
   if l:node['cycle']
     return
   endif
@@ -258,14 +294,16 @@ function! calltree#expand(node, ctx) abort
 
   " Funcref variables must start with a capital (E704), hence l:Cb.
   let l:Cb = function('s:on_calls', [l:ctx, l:node])
+  let l:provider = get(l:ctx, 'provider', 'vimlsp')
+  let l:server = get(l:ctx, 'server', '')
   if l:node['dir'] ==# 'in'
-    call calltree#provider#vimlsp#Incoming(l:ctx['server'], l:ctx['srcbufnr'], l:node['item'], l:Cb)
+    call calltree#provider#Incoming(l:provider, l:server, l:ctx['srcbufnr'], l:node['item'], l:Cb)
   else
-    call calltree#provider#vimlsp#Outgoing(l:ctx['server'], l:ctx['srcbufnr'], l:node['item'], l:Cb)
+    call calltree#provider#Outgoing(l:provider, l:server, l:ctx['srcbufnr'], l:node['item'], l:Cb)
   endif
 endfunction
 
-function! s:on_calls(ctx, node, calls, error) abort
+function! s:on_calls(ctx, node, calls, error, ...) abort
   let l:ctx = a:ctx
   if !bufloaded(l:ctx['bufnr'])
     return
@@ -275,8 +313,10 @@ function! s:on_calls(ctx, node, calls, error) abort
   endif
 
   let l:node = a:node
+  let l:meta = a:0 > 0 ? a:1 : {}
   let l:node['loading'] = 0
   let l:node['loaded'] = 1
+  let l:node['overflow'] = 0
 
   if !empty(a:error)
     let l:node['error'] = a:error
@@ -324,8 +364,11 @@ function! s:on_calls(ctx, node, calls, error) abort
     endif
   endfor
 
-  let l:node['hidden'] = len(l:hidden)
+  " Search providers cap raw hits before grouping; when that happens the
+  " number of distinct symbols left out is unknown, only that there are some.
+  let l:node['hidden'] = len(l:hidden) + get(l:meta, 'hidden', 0)
   let l:node['truncated'] = l:node['hidden'] > 0
+  let l:node['overflow'] = get(l:meta, 'overflow', 0)
   let l:node['expanded'] = 1
   call calltree#view#Render(l:ctx['bufnr'])
 endfunction

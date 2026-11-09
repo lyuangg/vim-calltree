@@ -5,8 +5,11 @@ CONTENTS                                             *calltree-contents*
 
   1. 命令 ........................................ |calltree-commands|
   2. 键位 ........................................ |calltree-maps|
-  3. 配置 ........................................ |calltree-config|
-  4. 限制 ........................................ |calltree-limits|
+  3. 高亮 ........................................ |calltree-highlight|
+  4. 配置 ........................................ |calltree-config|
+  5. 顺序 ........................................ |calltree-order|
+  6. PHP 搜索后端 ................................ |calltree-php|
+  7. 限制 ........................................ |calltree-limits|
 
 ==============================================================================
 1. 命令                                              *calltree-commands*
@@ -25,6 +28,7 @@ CONTENTS                                             *calltree-contents*
 预览用的是 scratch buffer（calltree://<path>），不会真的打开文件、不会进 buffer 列表。
 
 光标必须落在函数名上：服务端用 textDocument/prepareCallHierarchy 解析当前位置。
+PHP 使用搜索后端（见 |calltree-php|），光标在定义处或调用点都可以。
 
 ==============================================================================
 2. 键位                                                *calltree-maps*
@@ -72,6 +76,7 @@ q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
   CallTreeExternal  第三方依赖（module cache、vendor/）
   CallTreeCycle     环标记，加粗
   CallTreeLoading   请求中的节点，斜体
+  CallTreeUnresolved PHP 中找不到定义的符号（内置函数、动态调用），斜体
   CallTreeCount     "xN" 与截断标记
   CallTreeLocation  文件路径
   CallTreeLine      行号，默认链接 LineNr
@@ -97,6 +102,26 @@ g:calltree_float_height     K 浮动窗口的最大高度（行），默认 20�
 g:calltree_float_width      K 浮动窗口的最大宽度（单元格），默认 100。
 g:calltree_default_maps     是否安装默认键位，默认 1。
 
+PHP 搜索后端：
+
+g:calltree_php_provider     PHP 使用的后端，默认 'auto'：
+                            'auto' = definition/references 优先、搜索兜底；
+                            'lsp' = 只用服务器，不做搜索兜底（无服务器时报错）；
+                            'search' = 纯搜索。
+g:calltree_php_references_fallback
+                            'auto' 模式下 references 返回空时是否回退到搜索
+                            （服务器仍在索引），默认 1。
+g:calltree_php_callee_definition
+                            是否用 textDocument/definition 精修每个被调用者
+                            调用点，默认 1。
+g:calltree_php_engine       'rg'、'ag' 或 'auto'，默认 'auto'（优先 rg）。
+g:calltree_php_max_results  单次搜索最多读取的原始匹配行数，默认 300；
+                            超出后树中显示 "…+?"。
+g:calltree_php_timeout      搜索超时毫秒数，默认 15000。
+g:calltree_php_max_bytes    超过该字节数的 PHP 文件不解析，默认 2097152。
+g:calltree_php_ignore       调用点搜索跳过的目录，默认 ['vendor', 'node_modules']。
+g:calltree_php_globs        调用点搜索的文件通配符，默认 ['*.php', '*.phtml']。
+
 ==============================================================================
 5. 顺序                                                *calltree-order*
 
@@ -107,12 +132,43 @@ g:calltree_default_maps     是否安装默认键位，默认 1。
   - 同一函数的多个调用点按行号升序，]c / [c 依次向前/向后走。
 
 ==============================================================================
-6. 限制                                                *calltree-limits*
+6. PHP 搜索后端                                          *calltree-php*
+
+PHP 语言服务器基本都不实现 textDocument/prepareCallHierarchy，但普遍实现了
+textDocument/definition 与 textDocument/references。默认的 'auto' 模式：
+
+  - 根符号：textDocument/definition；没有服务器时按名字搜索。
+  - 调用者：textDocument/references，只保留真正的 "name(" 调用点，按所在函数
+    分组，因此不同类的同名方法不会混淆。
+  - 搜索模式的调用者按类/可见性收敛：全局函数只匹配普通 name(；方法匹配
+    Class::name(、self::/static::/parent::、$this->name(，public 方法还匹配
+    提到该类的文件里的 $var->name(；private 只搜类文件，protected 搜类文件 +
+    直接子类；子类重写的方法不算 self/static/$this 调用点。
+  - 被调用者：直接读取函数体枚举调用表达式（LSP 没有 outgoingCalls），
+    然后每个调用点用 textDocument/definition 解析；definition 失败时再用
+    搜索按名字/接收者解析。
+  - 兜底：没有服务器、方法不支持、references 为空（索引中）时回退到
+    ripgrep/ag 搜索；需要 rg 或 ag 在 $PATH 中。
+  - 字符串、注释、heredoc、new 表达式会被忽略。
+  - 搜索根目录内找不到定义的节点显示为未解析：斜体、无位置、标记为 "·"。
+  - 工作区根目录是文件上方最近一个包含 .git 或 composer.json 的目录。
+
+==============================================================================
+7. 限制                                                *calltree-limits*
 
 - 调用图来自静态分析：接口/动态分发、__call、反射、DI 容器、事件监听都可能
   解析不到。
 - 每次展开都是独立请求，代码改动后按 r 重新解析。
 - 同一个函数在多个位置被调用时合并为一个节点，调用点数显示为 xN；
   用 ]c / [c 在这些调用点之间循环。
+
+PHP 搜索后端的限制：
+
+- 按名字匹配：不同类中同名方法的调用者会混在一起；只有接收者静态可知
+  （$this、self、parent、Class::）时，被调用者才按类区分。
+- 动态调用（$fn()、$obj->$m()、call_user_func、__call）、没有同文件定义的
+  trait 方法、use function 别名无法解析。
+- 调用点搜索从磁盘读取文件；未保存的修改只对当前文件的定义生效。
+- 原始匹配数受 g:calltree_php_max_results 限制，其余显示为 "…+?"。
 
  vim:tw=78:ts=8:ft=help:norl:

@@ -3,8 +3,10 @@
 [English](README.md) | 中文
 
 Vim 的调用层级树。显示光标所在函数被谁调用、又调用了谁，以懒加载的树形结构展示，
-右侧附带源码预览。数据来自 [vim-lsp](https://github.com/prabirshrestha/vim-lsp)
-与 LSP 3.16 的 Call Hierarchy 协议。
+右侧附带源码预览。LSP 语言使用
+[vim-lsp](https://github.com/prabirshrestha/vim-lsp) 与 LSP 3.16 Call
+Hierarchy 协议；PHP 在服务器可用时使用 `definition`/`references`，否则回退到
+静态搜索。
 
 ```
 ● mid  main.go:7
@@ -21,6 +23,7 @@ Vim 的调用层级树。显示光标所在函数被谁调用、又调用了谁�
   `g:lsp_use_native_client = 1` 下验证。
 - vim-lsp。
 - 实现 `callHierarchyProvider` 的语言服务器。已验证 gopls。
+- PHP：`$PATH` 中有 `rg` 或 `ag`；PHP 语言服务器可选。
 
 ## 安装
 
@@ -35,6 +38,23 @@ Plug 'lyuangg/vim-calltree'
 `textDocument/prepareCallHierarchy` 的要求。
 
 树在新建的 tab 中打开：左侧为树，右侧为源码预览，原 tab 不受影响。
+
+### PHP
+
+PHP 语言服务器通常不实现 Call Hierarchy。插件在服务器可用时使用
+`textDocument/definition` 与 `textDocument/references`，Callees 从源码枚举；
+服务器无法响应时回退到 `rg`/`ag` 搜索。
+
+`g:calltree_php_provider` 选择后端：
+
+| 值 | 行为 |
+| --- | --- |
+| `'auto'` | 服务器优先，搜索兜底（默认） |
+| `'lsp'` | 仅服务器，不做搜索兜底 |
+| `'search'` | 仅搜索，不需要服务器 |
+
+搜索模式按类与可见性匹配调用者，而不是只按名字。工作区根目录为文件上方最近一个
+包含 `.git` 或 `composer.json` 的目录。
 
 ### 命令
 
@@ -94,6 +114,7 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `↻` | 环，祖先中已包含该函数 |
 | `×N` | 被调用 N 次 |
 | `…+N` | 因 `g:calltree_max_children` 省略了 N 个符号 |
+| `…+?` | 达到 PHP 搜索上限，省略的符号数量未知 |
 
 ### 高亮组
 
@@ -106,6 +127,7 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `CallTreeExternal` | 第三方代码（module cache、`vendor/`） | 琥珀色 |
 | `CallTreeCycle` | 环标记 | 加粗，橙色 |
 | `CallTreeLoading` | 请求中 | 斜体，灰色 |
+| `CallTreeUnresolved` | PHP 中在搜索根目录内找不到定义的符号 | 斜体，灰色 |
 | `CallTreeCount` | `×N`、`…+N` | 紫色 |
 | `CallTreeLocation` | 文件路径 | 灰色 |
 | `CallTreeLine` | 行号 | 链接到 `LineNr` |
@@ -131,12 +153,26 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `g:calltree_float_height` | `20` | `K` 浮窗的最大高度（行），超出部分用 `<C-d>`/`<C-u>` 翻页 |
 | `g:calltree_float_width` | `100` | `K` 浮窗的最大宽度（单元格） |
 | `g:calltree_default_maps` | `1` | 安装默认键位。`0` 仅提供 `<Plug>` |
+| `g:calltree_php_provider` | `'auto'` | `'auto'`（服务器 + 搜索兜底）、`'lsp'`（只用服务器）、`'search'` |
+| `g:calltree_php_references_fallback` | `1` | `'auto'` 模式下 references 返回空时回退搜索（服务器仍在索引） |
+| `g:calltree_php_callee_definition` | `1` | 用 `textDocument/definition` 精修每个被调用者调用点 |
+| `g:calltree_php_engine` | `'auto'` | `'rg'`、`'ag'` 或 `'auto'` |
+| `g:calltree_php_max_results` | `300` | 单次搜索最多读取的原始匹配行数 |
+| `g:calltree_php_timeout` | `15000` | 搜索超时，单位毫秒 |
+| `g:calltree_php_max_bytes` | `2097152` | 超过该字节数的文件不解析 |
+| `g:calltree_php_ignore` | `['vendor', 'node_modules']` | 调用点搜索跳过的目录 |
+| `g:calltree_php_globs` | `['*.php', '*.phtml']` | 调用点搜索的文件通配符 |
 
 ## 限制
 
 - 调用图来自静态分析，反射、生成代码、经由 `any` 的调用无法解析。
 - 每次展开都是独立请求。代码修改后按 `r` 重新解析。
 - 每个节点的调用者/被调用者数量受 `g:calltree_max_children` 限制，其余以 `…+N` 表示。
+- PHP 有服务器时调用者来自 `textDocument/references`；搜索模式按类与可见性
+  匹配，但类别名与变量调用仍不精确。
+- PHP 的 Callees 从源码枚举，优先用 `definition` 解析，否则按名字解析。
+- PHP 动态调用、没有同文件定义的 trait 方法、`use function` 别名无法解析；
+  搜索读取磁盘文件，结果受 `g:calltree_php_max_results` 限制（`…+?`）。
 
 ## 测试
 
@@ -146,4 +182,10 @@ vim -Nu NONE -es -S test/smoke.vim && cat test/smoke.log
 
 # 使用 gopls 做端到端验证
 test/integration.sh
+
+# PHP 搜索后端：解析器单测 + 固定项目端到端（需要 rg 或 ag）
+test/php.sh
+
+# PHP + intelephense：definition/references 路径（未安装时自动跳过）
+test/php_lsp.sh
 ```
