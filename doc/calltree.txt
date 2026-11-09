@@ -1,0 +1,113 @@
+*calltree.txt*  Call hierarchy tree for Vim, backed by vim-lsp
+
+==============================================================================
+CONTENTS                                             *calltree-contents*
+
+  1. 命令 ........................................ |calltree-commands|
+  2. 键位 ........................................ |calltree-maps|
+  3. 配置 ........................................ |calltree-config|
+  4. 限制 ........................................ |calltree-limits|
+
+==============================================================================
+1. 命令                                              *calltree-commands*
+
+:CallTree           在光标所在函数上打开调用树，callers 和 callees 各展开一层。
+                    默认在新 tab 页打开：左边是树，右边是预览窗口；
+                    q 关闭整个 tab 页（g:calltree_tab = 0 则改为当前 tab 分屏）。
+:CallTreeCallers    只显示调用者。
+:CallTreeCallees    只显示被调用者。
+:CallTreeRefresh    丢弃缓存，从当前位置重新解析。
+:CallTreeExpand     把当前可见的整棵树再展开一层（类似 fold 的 zr）。
+:CallTreeQF         把当前可见节点导出到 quickfix。
+:CallTreeClose      关闭树窗口。
+
+光标在树里移动时右侧窗口自动预览，默认定位到**调用点**（g:calltree_preview_site）。
+预览用的是 scratch buffer（calltree://<path>），不会真的打开文件、不会进 buffer 列表。
+
+光标必须落在函数名上：服务端用 textDocument/prepareCallHierarchy 解析当前位置。
+
+==============================================================================
+2. 键位                                                *calltree-maps*
+
+<CR>     真实打开该文件到定义处，并切回 :CallTree 所在的编辑窗口（离开树 tab）。
+e        同 <CR>。光标移动（j/k/gg/G/搜索）本身就会在右侧窗口预览，
+         焦点留在树里。
+g<CR>    在预览窗口显示函数定义，不离开树 tab。
+gs       在预览窗口显示调用点（服务器返回的 fromRanges）。
+o        展开 / 折叠光标所在的节点。展开时才向服务器发请求。
+L        整棵可见树再展开一层；作用范围是当前可见的所有节点。
+<BS>     跳到父节点所在行。
+]c [c    同一函数的多个调用点之间循环。
+Q        把当前可见节点导出到 quickfix。
+r        重新解析整棵树。
+q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
+
+所有映射都通过 |<Plug>| 提供，设置 g:calltree_default_maps = 0 可禁用默认键位：
+
+  <Plug>(calltree-jump)
+  <Plug>(calltree-jump-site)
+  <Plug>(calltree-toggle)
+  <Plug>(calltree-expand-level)
+  <Plug>(calltree-parent)
+  <Plug>(calltree-refresh)
+  <Plug>(calltree-close)
+  <Plug>(calltree-next-site)
+  <Plug>(calltree-prev-site)
+  <Plug>(calltree-quickfix)
+
+==============================================================================
+3. 高亮                                                *calltree-highlight*
+
+按角色区分颜色，默认值随 'background' 切换：
+
+  CallTreeRoot      根节点，加粗
+  CallTreeCaller    调用者节点（上游）
+  CallTreeCallee    被调用者节点（下游）
+  CallTreeDirIn     "▲ Callers" 分组标题，加粗
+  CallTreeDirOut    "▼ Callees" 分组标题，加粗
+  CallTreeStdlib    标准库节点（GOROOT/src 下），斜体
+  CallTreeExternal  第三方依赖（module cache、vendor/）
+  CallTreeCycle     环标记，加粗
+  CallTreeLoading   请求中的节点，斜体
+  CallTreeCount     "xN" 与截断标记
+  CallTreeLocation  文件路径
+  CallTreeLine      行号，默认链接 LineNr
+  CallTreeMarker    展开/折叠标记，默认链接 NonText
+  CallTreeError     错误文本，默认链接 ErrorMsg
+
+全部通过 `highlight default` 定义，可以在 vimrc 里重新定义其中任意一个来覆盖；
+ColorScheme 变更或 :set background 之后会自动重新应用。
+
+==============================================================================
+4. 配置                                                *calltree-config*
+
+g:calltree_tab              在新 tab 页里打开树和预览窗口，默认 1。
+g:calltree_width            树窗口占可用宽度的百分比，默认 50，随 VimResized 调整。
+g:calltree_max_children     单个节点最多列出的子节点数，默认 50。
+g:calltree_auto_expand      打开时自动展开的层数，默认 1；设为 2 即展开两层。
+g:calltree_expand_limit     每次整体展开一层时最多并发多少请求，默认 30。
+g:calltree_preview          光标在树里移动时是否自动预览源码，默认 1。
+g:calltree_preview_site     预览定位到调用点而不是定义，默认 1。
+g:calltree_preview_max_bytes 超过该字节数的文件不预览内容，默认 2097152。
+g:calltree_preview_delay    预览防抖毫秒数，默认 60。
+g:calltree_default_maps     是否安装默认键位，默认 1。
+
+==============================================================================
+5. 顺序                                                *calltree-order*
+
+同一层的节点按代码顺序排列，而不是服务器返回的顺序：
+
+  - 下游（Callees）按调用在函数体里出现的先后排序。
+  - 上游（Callers）同文件优先，文件内按调用者的定义位置排序。
+  - 同一函数的多个调用点按行号升序，]c / [c 依次向前/向后走。
+
+==============================================================================
+6. 限制                                                *calltree-limits*
+
+- 调用图来自静态分析：接口/动态分发、__call、反射、DI 容器、事件监听都可能
+  解析不到。
+- 每次展开都是独立请求，代码改动后按 r 重新解析。
+- 同一个函数在多个位置被调用时合并为一个节点，调用点数显示为 xN；
+  用 ]c / [c 在这些调用点之间循环。
+
+ vim:tw=78:ts=8:ft=help:norl:
