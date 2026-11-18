@@ -159,7 +159,7 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `g:calltree_float_height` | `20` | `K` 浮窗的最大高度（行），超出部分用 `<C-d>`/`<C-u>` 翻页 |
 | `g:calltree_float_width` | `100` | `K` 浮窗的最大宽度（单元格） |
 | `g:calltree_default_maps` | `1` | 安装默认键位。`0` 仅提供 `<Plug>` |
-| `g:calltree_guides` | `1` | 每层前的彩色竖线引导；`0` 保持纯空格缩进 |
+| `g:calltree_guides` | `1` | 彩色树状连接线（`├─`、`└─`、`│`）；`0` 保持纯空格缩进 |
 | `g:calltree_php_provider` | `'auto'` | `'auto'`（服务器 + 搜索兜底）、`'lsp'`（只用服务器）、`'search'` |
 | `g:calltree_php_references_fallback` | `1` | `'auto'` 模式下 references 返回空时回退搜索（服务器仍在索引） |
 | `g:calltree_php_callee_definition` | `1` | 用 `textDocument/definition` 精修每个被调用者调用点 |

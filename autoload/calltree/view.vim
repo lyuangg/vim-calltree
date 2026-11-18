@@ -444,18 +444,61 @@ function! s:walk(node, depth, acc) abort
   endfor
 endfunction
 
-function! s:line(node, depth, root_dir) abort
-  " One vertical guide per ancestor level, each in its own colour.  Turning
-  " g:calltree_guides off keeps the old plain indentation.
-  let l:guides = calltree#cfg('guides', 1)
+" Sibling position among the *rendered* children decides whether a branch
+" continues below: the last rendered child is drawn with └─.
+function! s:has_next_sibling(node) abort
+  let l:parent = get(a:node, 'parent', {})
+  if empty(l:parent)
+    return 0
+  endif
+  let l:idx = index(l:parent['children'], a:node)
+  return l:idx >= 0 && l:idx < len(l:parent['children']) - 1
+endfunction
+
+" tree(1)-style prefix: "│  " for each ancestor whose branch goes on, then the
+" node's own "├─ " / "└─ " connector.  Root rows have none.  Each level keeps
+" its own colour, so a branch's vertical line matches the connector below it.
+function! s:guide_prefix(node, depth) abort
+  if a:depth == 0
+    return []
+  endif
+
+  " Ancestors from the parent up, root dropped (the top level has no column of
+  " its own), then back to depth order.
+  let l:chain = []
+  let l:cur = a:node['parent']
+  while !empty(l:cur)
+    call add(l:chain, l:cur)
+    let l:cur = get(l:cur, 'parent', {})
+  endwhile
+  call remove(l:chain, -1)
+  call reverse(l:chain)
+
   let l:pieces = []
-  for l:level in range(a:depth)
-    if l:guides
-      call add(l:pieces, [s:guide_group(l:level), '│ '])
+  let l:level = 0
+  for l:ancestor in l:chain
+    if s:has_next_sibling(l:ancestor)
+      call add(l:pieces, [s:guide_group(l:level), '│  '])
     else
-      call add(l:pieces, ['', '  '])
+      call add(l:pieces, ['', '   '])
     endif
+    let l:level += 1
   endfor
+  call add(l:pieces, [s:guide_group(l:level),
+        \ s:has_next_sibling(a:node) ? '├─ ' : '└─ '])
+  return l:pieces
+endfunction
+
+function! s:line(node, depth, root_dir) abort
+  " tree(1)-style connectors, or plain spaces when g:calltree_guides is off.
+  let l:pieces = []
+  if calltree#cfg('guides', 1)
+    let l:pieces = s:guide_prefix(a:node, a:depth)
+  else
+    for l:level in range(a:depth)
+      call add(l:pieces, ['', '  '])
+    endfor
+  endif
   call add(l:pieces, ['calltree_marker', s:marker(a:node) . ' '])
 
   if a:node['group']

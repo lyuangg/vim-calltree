@@ -95,7 +95,7 @@ q        关闭整个树 tab 页。
   CallTreeLine      行号，默认链接 LineNr
   CallTreeMarker    展开/折叠标记，默认链接 NonText
   CallTreeHelpKey   浮动帮助里的键位，加粗
-  CallTreeGuide1..6 层级竖线引导，颜色随每次打开树随机轮换
+  CallTreeGuide1..6 树状连接线，每层颜色随每次打开树随机轮换
   CallTreeError     错误文本，默认链接 ErrorMsg
 
 全部通过 `highlight default` 定义，可以在 vimrc 里重新定义其中任意一个来覆盖；
@@ -116,8 +116,8 @@ g:calltree_preview_delay    预览防抖毫秒数，默认 60。
 g:calltree_float_height     K 浮动窗口的最大高度（行），默认 20。
 g:calltree_float_width      K 浮动窗口的最大宽度（单元格），默认 100。
 g:calltree_default_maps     是否安装默认键位，默认 1。
-g:calltree_guides           是否在每层前画彩色竖线引导，默认 1；0 关闭，
-                            回到纯空格缩进。
+g:calltree_guides           是否用彩色连接线（├─ / └─ / │）画出树状层级，
+                            默认 1；0 关闭，回到纯空格缩进。
 
 PHP 搜索后端：
 

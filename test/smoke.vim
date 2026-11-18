@@ -192,29 +192,37 @@ call s:check('d keeps the group line style', !empty(prop_list(2)))
 call s:check('d keeps the cursor on the following node',
       \ line('.') == 3 && b:calltree_index[line('.')] is s:ib)
 
-" indent guides: one coloured vertical line per level, randomly ordered
+" tree connectors: ├─ / └─ for branches, │ where a branch continues, each
+" level coloured from the randomly rotated palette
 enew
 setlocal buftype=nofile
 let s:groot = calltree#new_node(s:item, 'root')
 let s:groot['loaded'] = 1
 let s:groot['expanded'] = 1
-let s:ggroup = calltree#new_node(s:item, 'in')
-let s:ggroup['name'] = 'Callers'
-let s:ggroup['group'] = 1
-let s:ggroup['parent'] = s:groot
-let s:ggroup['loaded'] = 1
-let s:ggroup['expanded'] = 1
-let s:groot['children'] = [s:ggroup]
-let s:gchild = calltree#new_node(s:child_item, 'in')
-let s:gchild['parent'] = s:ggroup
-let s:ggroup['children'] = [s:gchild]
+let s:groot['children'] = []
+for s:label in ['Callers', 'Callees']
+  let s:ggroup = calltree#new_node(s:item, s:label ==# 'Callers' ? 'in' : 'out')
+  let s:ggroup['name'] = s:label
+  let s:ggroup['group'] = 1
+  let s:ggroup['parent'] = s:groot
+  let s:ggroup['loaded'] = 1
+  let s:ggroup['expanded'] = 1
+  let s:gchild = calltree#new_node(s:child_item, s:ggroup['dir'])
+  let s:gchild['parent'] = s:ggroup
+  let s:ggroup['children'] = [s:gchild]
+  call add(s:groot['children'], s:ggroup)
+endfor
 let b:calltree = {'gen': 5, 'bufnr': bufnr('%'), 'root': s:groot, 'index': {},
       \ 'srcbufnr': bufnr('%'), 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
 call setbufvar(bufnr('%'), 'calltree_gen', 5)
 call calltree#view#Render(bufnr('%'))
-call s:check('guides draw one line per level', getline(3) =~# '^│ │ ')
+call s:check('tree draws a connector for a branch', getline(2) =~# '^├─ ')
+call s:check('tree closes the last branch with └─', getline(4) =~# '^└─ ')
+call s:check('tree continues the parent branch at depth 2',
+      \ getline(3) =~# '^│  └─ ')
+call s:check('root has no connector', getline(1) =~# '^● ')
 let s:gspans = filter(copy(prop_list(3)), 'v:val["type"] =~# "^calltree_guide_"')
-call s:check('levels get different guide colours',
+call s:check('branch and connector use different colours',
       \ len(s:gspans) == 2
       \ && len(uniq(sort(map(copy(s:gspans), 'v:val["type"]')))) == 2)
 call s:check('all guide colours are defined',
