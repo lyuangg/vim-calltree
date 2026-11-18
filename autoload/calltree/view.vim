@@ -58,13 +58,15 @@ function! calltree#view#InitHighlights() abort
 endfunction
 
 function! s:init_props(bufnr) abort
-  " prop_type_add refuses groups that do not exist yet, and Render must work
-  " even when plugin/calltree.vim has not been sourced (tests, lazy loaders).
-  call calltree#view#InitHighlights()
   for [l:type, l:group] in items(s:highlights)
-    if empty(prop_type_get(l:type, {'bufnr': a:bufnr}))
-      call prop_type_add(l:type, {'bufnr': a:bufnr, 'highlight': l:group})
+    if !empty(prop_type_get(l:type, {'bufnr': a:bufnr}))
+      continue
     endif
+    " prop_type_add refuses groups that do not exist yet, and the view must
+    " work even when plugin/calltree.vim has not been sourced (tests, lazy
+    " loaders).  Everything is set up already on the usual second render.
+    call calltree#view#InitHighlights()
+    call prop_type_add(l:type, {'bufnr': a:bufnr, 'highlight': l:group})
   endfor
 endfunction
 
@@ -110,7 +112,7 @@ function! calltree#view#InitMaps() abort
   nmap <buffer> ]c     <Plug>(calltree-next-site)
   nmap <buffer> [c     <Plug>(calltree-prev-site)
   nmap <buffer> Q      <Plug>(calltree-quickfix)
-  nmap <buffer> d      <Plug>(calltree-delete)
+  nmap <buffer> dd     <Plug>(calltree-delete)
   nmap <buffer> ?      <Plug>(calltree-help)
 
   augroup calltree_preview
@@ -255,6 +257,102 @@ function! calltree#view#Render(bufnr) abort
   endfor
 
   call s:restore_anchors(l:anchors, l:acc['index'], len(l:acc['lines']))
+endfunction
+
+" How many rendered lines a node occupies, itself included.
+function! s:visible_count(node) abort
+  let l:count = 1
+  if a:node['expanded']
+    for l:child in a:node['children']
+      let l:count += s:visible_count(l:child)
+    endfor
+  endif
+  return l:count
+endfunction
+
+function! s:depth(node) abort
+  let l:depth = 0
+  let l:cur = get(a:node, 'parent', {})
+  while !empty(l:cur)
+    let l:depth += 1
+    let l:cur = get(l:cur, 'parent', {})
+  endwhile
+  return l:depth
+endfunction
+
+" Redraw a single line in place: same text/prop machinery as Render(), for the
+" rows whose content changes without the tree changing (a group's count).
+function! s:render_line(bufnr, lnum, node) abort
+  let l:ctx = getbufvar(a:bufnr, 'calltree', {})
+  let [l:text, l:spans] = s:line(a:node, s:depth(a:node), get(l:ctx, 'root_dir', ''))
+  call setbufvar(a:bufnr, '&modifiable', 1)
+  call setbufline(a:bufnr, a:lnum, l:text)
+  call setbufvar(a:bufnr, '&modified', 0)
+  call setbufvar(a:bufnr, '&modifiable', 0)
+  call prop_clear(a:lnum, a:lnum, {'bufnr': a:bufnr})
+  for [l:type, l:col, l:len] in l:spans
+    if l:len > 0
+      call prop_add(a:lnum, l:col, {'type': l:type, 'length': l:len, 'bufnr': a:bufnr})
+    endif
+  endfor
+endfunction
+
+" Remove `node` from the rendered tree after it has been detached from its
+" parent.  Unlike Render() this touches only the node's own block of lines:
+" the buffer edit is one deletebufline(), the text properties of the remaining
+" lines travel with their text, and the line -> node index is shifted by the
+" number of lines that left.  The subtree is child-ordered, so it is exactly
+" contiguous below the node.  Returns 0 when the node is not on screen.
+function! calltree#view#RemoveNode(node, bufnr) abort
+  " b: is the live dict; getbufvar()/setbufvar() copy it, which is measurable
+  " on a tree with hundreds of visible nodes.
+  let l:current = a:bufnr == bufnr('%')
+  let l:index = l:current
+        \ ? get(b:, 'calltree_index', {})
+        \ : getbufvar(a:bufnr, 'calltree_index', {})
+  let l:first = 0
+  let l:parent_lnum = 0
+  let l:parent = get(a:node, 'parent', {})
+  for [l:lnum, l:candidate] in items(l:index)
+    if l:candidate is a:node
+      let l:first = str2nr(l:lnum)
+    elseif !empty(l:parent) && l:candidate is l:parent
+      let l:parent_lnum = str2nr(l:lnum)
+    endif
+  endfor
+  if l:first == 0
+    return 0
+  endif
+
+  call s:init_props(a:bufnr)
+  let l:count = s:visible_count(a:node)
+  let l:last = l:first + l:count - 1
+
+  call setbufvar(a:bufnr, '&modifiable', 1)
+  call deletebufline(a:bufnr, l:first, l:last)
+  call setbufvar(a:bufnr, '&modified', 0)
+  call setbufvar(a:bufnr, '&modifiable', 0)
+
+  let l:shifted = {}
+  for [l:lnum, l:candidate] in items(l:index)
+    let l:lnum = str2nr(l:lnum)
+    if l:lnum < l:first
+      let l:shifted[l:lnum] = l:candidate
+    elseif l:lnum > l:last
+      let l:shifted[l:lnum - l:count] = l:candidate
+    endif
+  endfor
+  if l:current
+    let b:calltree_index = l:shifted
+  else
+    call setbufvar(a:bufnr, 'calltree_index', l:shifted)
+  endif
+
+  " A group's "(N)" count is part of its line and just changed.
+  if l:parent_lnum > 0 && get(l:parent, 'group', 0)
+    call s:render_line(a:bufnr, l:parent_lnum, l:parent)
+  endif
+  return 1
 endfunction
 
 function! s:capture_anchors(bufnr) abort

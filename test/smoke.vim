@@ -149,6 +149,49 @@ call cursor(1, 1)
 call calltree#action#delete()
 call s:check('d refuses to delete the root', line('$') == 1 && s:droot['name'] ==# 'handle')
 
+" d is incremental: the remaining lines keep their nodes and properties, and
+" a group's count is redrawn in place.
+enew
+setlocal buftype=nofile
+let s:iroot = calltree#new_node(s:item, 'root')
+let s:iroot['loaded'] = 1
+let s:iroot['expanded'] = 1
+let s:igroup = calltree#new_node(s:item, 'in')
+let s:igroup['name'] = 'Callers'
+let s:igroup['group'] = 1
+let s:igroup['parent'] = s:iroot
+let s:igroup['loaded'] = 1
+let s:igroup['expanded'] = 1
+let s:iroot['children'] = [s:igroup]
+let s:ia = calltree#new_node(s:child_item, 'in')
+let s:ia['parent'] = s:igroup
+let s:ia['loaded'] = 1
+let s:ia['expanded'] = 1
+let s:ia1 = calltree#new_node(s:child_item, 'in')
+let s:ia1['name'] = 'a1'
+let s:ia1['parent'] = s:ia
+let s:ia['children'] = [s:ia1]
+let s:ib = calltree#new_node(s:child_item, 'in')
+let s:ib['name'] = 'b'
+let s:ib['parent'] = s:igroup
+let s:igroup['children'] = [s:ia, s:ib]
+let b:calltree = {'gen': 4, 'bufnr': bufnr('%'), 'root': s:iroot, 'index': {},
+      \ 'srcbufnr': bufnr('%'), 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
+call setbufvar(bufnr('%'), 'calltree_gen', 4)
+call calltree#view#Render(bufnr('%'))
+call s:check('incremental tree renders 5 lines', line('$') == 5)
+call s:check('group shows its child count', getline(2) =~# '(2)')
+call cursor(3, 1)
+call calltree#action#delete()
+call s:check('d removes the node and its expanded child', line('$') == 3)
+call s:check('d shifts the following node', b:calltree_index[3] is s:ib)
+call s:check('d keeps the group node in the index', b:calltree_index[2] is s:igroup)
+call s:check('d redraws the group count', getline(2) =~# '(1)')
+call s:check('d keeps props on the shifted line', !empty(prop_list(3)))
+call s:check('d keeps the group line style', !empty(prop_list(2)))
+call s:check('d keeps the cursor on the following node',
+      \ line('.') == 3 && b:calltree_index[line('.')] is s:ib)
+
 " K: the floating definition shows the declaration range, hides itself as soon
 " as the tree cursor moves, and does not leak its scratch buffer.
 if has('popupwin')
@@ -243,8 +286,8 @@ enew
 call calltree#view#InitMaps()
 call s:check('? is mapped to the key help',
       \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
-call s:check('d is mapped to delete',
-      \ maparg('d', 'n') ==# '<Plug>(calltree-delete)')
+call s:check('dd is mapped to delete',
+      \ maparg('dd', 'n') ==# '<Plug>(calltree-delete)')
 
 " The viewer buffer is read-only: q must leave the tree layout, not start a
 " macro recording.

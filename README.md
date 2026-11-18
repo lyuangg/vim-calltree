@@ -86,7 +86,7 @@ All mappings are buffer-local and available as `<Plug>`.
 | `K` | `(calltree-float)` | Show the definition in a floating window |
 | `L` | `(calltree-expand-level)` | Expand the visible tree by one level |
 | `]c` / `[c` | `(calltree-next-site)` / `(calltree-prev-site)` | Next / previous call site of the node |
-| `d` | `(calltree-delete)` | Remove the node and its subtree from the tree (view only) |
+| `dd` | `(calltree-delete)` | Remove the node and its subtree from the tree (view only) |
 | `<BS>` | `(calltree-parent)` | Move to the parent node |
 | `Q` | `(calltree-quickfix)` | Export to the quickfix list |
 | `?` | `(calltree-help)` | Show the key help in a floating window |
