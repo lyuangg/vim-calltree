@@ -168,6 +168,7 @@ vimrc. They are reapplied on `ColorScheme` and on `:set background`.
 | `g:calltree_float_height` | `20` | Maximum height of the `K` popup in lines; longer bodies page with `<C-d>`/`<C-u>` |
 | `g:calltree_float_width` | `100` | Maximum width of the `K` popup in cells |
 | `g:calltree_default_maps` | `1` | Install the default keys. `0` provides only `<Plug>` |
+| `g:calltree_guides` | `1` | Coloured indent guides, one per level; `0` keeps plain indentation |
 | `g:calltree_php_provider` | `'auto'` | `'auto'` (server + search fallback), `'lsp'` (server only), `'search'` |
 | `g:calltree_php_references_fallback` | `1` | In `'auto'` mode, fall back to search when `references` returns nothing (server still indexing) |
 | `g:calltree_php_callee_definition` | `1` | Resolve each callee call site with `textDocument/definition` |

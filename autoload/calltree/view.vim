@@ -21,7 +21,18 @@ let s:highlights = {
       \ 'calltree_loc':     'CallTreeLocation',
       \ 'calltree_lnum':    'CallTreeLine',
       \ 'calltree_err':     'CallTreeError',
+      \ 'calltree_guide_1': 'CallTreeGuide1',
+      \ 'calltree_guide_2': 'CallTreeGuide2',
+      \ 'calltree_guide_3': 'CallTreeGuide3',
+      \ 'calltree_guide_4': 'CallTreeGuide4',
+      \ 'calltree_guide_5': 'CallTreeGuide5',
+      \ 'calltree_guide_6': 'CallTreeGuide6',
       \ }
+
+" Indent guides: one vertical line per level, at most this many distinct
+" colours.  Depth beyond the palette wraps around.
+let s:guide_count = 6
+let s:guide_offset = 0
 
 " Direction carries the meaning: upstream (who calls me) is green, downstream
 " (what I call) is blue.  The palette is readable in 8-colour terminals and
@@ -52,9 +63,39 @@ function! calltree#view#InitHighlights() abort
   execute 'highlight default CallTreeExternal guifg=' . l:ext[0] . ' ctermfg=' . l:ext[1]
   execute 'highlight default CallTreeLocation guifg=' . l:dim[0] . ' ctermfg=' . l:dim[1]
   execute 'highlight default CallTreeHelpKey guifg=' . l:callee[0] . ' ctermfg=' . l:callee[1] . ' gui=bold cterm=bold'
+  let l:guides = [
+        \ ['#7f9f7f', 108, '#5f7f5f', 65],
+        \ ['#7f9fbf', 109, '#5f7f9f', 67],
+        \ ['#bf9f7f', 180, '#8e6b4a', 130],
+        \ ['#9f7fbf', 140, '#7f5f9f', 97],
+        \ ['#bf7f9f', 175, '#9f5f7f', 132],
+        \ ['#bfbf7f', 186, '#8e8e4a', 101],
+        \ ]
+  for l:i in range(0, len(l:guides) - 1)
+    let l:guide = l:guides[l:i]
+    let l:fg = l:dark ? l:guide[0] : l:guide[2]
+    let l:cterm = l:dark ? l:guide[1] : l:guide[3]
+    execute 'highlight default CallTreeGuide' . (l:i + 1)
+          \ . ' guifg=' . l:fg . ' ctermfg=' . l:cterm
+  endfor
   highlight default link CallTreeMarker NonText
   highlight default link CallTreeLine   LineNr
   highlight default link CallTreeError  ErrorMsg
+endfunction
+
+" Each :CallTree picks a random rotation of the guide palette, so the levels
+" get a different colour order every time.  It stays fixed while the tree is
+" browsed (expanding must not reshuffle the colours under the cursor).
+function! calltree#view#RandomizeGuides() abort
+  if exists('*rand')
+    let s:guide_offset = rand() % s:guide_count
+  else
+    let s:guide_offset = float2nr(reltimefloat(reltime()) * 1000000) % s:guide_count
+  endif
+endfunction
+
+function! s:guide_group(level) abort
+  return 'calltree_guide_' . ((a:level + s:guide_offset) % s:guide_count + 1)
 endfunction
 
 function! s:init_props(bufnr) abort
@@ -404,7 +445,17 @@ function! s:walk(node, depth, acc) abort
 endfunction
 
 function! s:line(node, depth, root_dir) abort
-  let l:pieces = [['', repeat('  ', a:depth)]]
+  " One vertical guide per ancestor level, each in its own colour.  Turning
+  " g:calltree_guides off keeps the old plain indentation.
+  let l:guides = calltree#cfg('guides', 1)
+  let l:pieces = []
+  for l:level in range(a:depth)
+    if l:guides
+      call add(l:pieces, [s:guide_group(l:level), '│ '])
+    else
+      call add(l:pieces, ['', '  '])
+    endif
+  endfor
   call add(l:pieces, ['calltree_marker', s:marker(a:node) . ' '])
 
   if a:node['group']

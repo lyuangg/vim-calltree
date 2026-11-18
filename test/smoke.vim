@@ -192,6 +192,39 @@ call s:check('d keeps the group line style', !empty(prop_list(2)))
 call s:check('d keeps the cursor on the following node',
       \ line('.') == 3 && b:calltree_index[line('.')] is s:ib)
 
+" indent guides: one coloured vertical line per level, randomly ordered
+enew
+setlocal buftype=nofile
+let s:groot = calltree#new_node(s:item, 'root')
+let s:groot['loaded'] = 1
+let s:groot['expanded'] = 1
+let s:ggroup = calltree#new_node(s:item, 'in')
+let s:ggroup['name'] = 'Callers'
+let s:ggroup['group'] = 1
+let s:ggroup['parent'] = s:groot
+let s:ggroup['loaded'] = 1
+let s:ggroup['expanded'] = 1
+let s:groot['children'] = [s:ggroup]
+let s:gchild = calltree#new_node(s:child_item, 'in')
+let s:gchild['parent'] = s:ggroup
+let s:ggroup['children'] = [s:gchild]
+let b:calltree = {'gen': 5, 'bufnr': bufnr('%'), 'root': s:groot, 'index': {},
+      \ 'srcbufnr': bufnr('%'), 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
+call setbufvar(bufnr('%'), 'calltree_gen', 5)
+call calltree#view#Render(bufnr('%'))
+call s:check('guides draw one line per level', getline(3) =~# '^│ │ ')
+let s:gspans = filter(copy(prop_list(3)), 'v:val["type"] =~# "^calltree_guide_"')
+call s:check('levels get different guide colours',
+      \ len(s:gspans) == 2
+      \ && len(uniq(sort(map(copy(s:gspans), 'v:val["type"]')))) == 2)
+call s:check('all guide colours are defined',
+      \ len(filter(map(range(1, 6), 'hlexists("CallTreeGuide" . v:val)'), '!v:val')) == 0)
+let g:calltree_guides = 0
+call calltree#view#Render(bufnr('%'))
+call s:check('guides can be turned off',
+      \ getline(3) =~# '^    ▸' && getline(3) !~# '│')
+unlet g:calltree_guides
+
 " K: the floating definition shows the declaration range, hides itself as soon
 " as the tree cursor moves, and does not leak its scratch buffer.
 if has('popupwin')

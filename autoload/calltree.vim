@@ -126,6 +126,9 @@ function! calltree#open(mode) abort
         \ ? get(get(b:, 'calltree', {}), 'srcwin', win_getid())
         \ : win_getid()
 
+  " A new tree gets a new random guide palette; expanding and refreshing
+  " within it keep the colours stable.
+  call calltree#view#RandomizeGuides()
   let s:generation += 1
   let l:ctx = {
         \ 'gen': s:generation,
