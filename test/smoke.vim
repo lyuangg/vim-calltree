@@ -234,6 +234,48 @@ call s:check('preview window shows line numbers',
       \ &l:number && !&l:relativenumber)
 call s:check('preview buffer maps q to close the tree',
       \ maparg('q', 'n') ==# '<Plug>(calltree-close)')
+call s:check('preview buffer maps <CR> to open the file',
+      \ maparg('<CR>', 'n') ==# '<Plug>(calltree-preview-open)')
+call s:check('preview buffer maps ? to the key help',
+      \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
+
+" <CR>: the preview's line is the file's line, so it opens the real file there.
+call cursor(2, 1)
+call calltree#action#open_preview()
+call s:check('preview <CR> opens the file',
+      \ resolve(expand('%:p')) ==# resolve(fnamemodify(s:prevfile, ':p')))
+call s:check('preview <CR> jumps to the line',
+      \ line('.') == 2 && getline(2) ==# 'func f() {}')
+
+" The same keys inside the real tree layout: <CR> goes back to the window
+" :CallTree was started from, and ? shows the preview's own key list.
+enew
+setlocal buftype=nofile
+let s:origwin = win_getid()
+let g:calltree_tab = 1
+let s:layout = calltree#view#OpenWindow({})
+call setbufvar(winbufnr(s:layout.tree), 'calltree',
+      \ {'gen': 1, 'bufnr': winbufnr(s:layout.tree),
+      \  'openwin': s:origwin, 'srcwin': s:layout.viewer})
+call win_execute(s:layout.viewer,
+      \ 'call calltree#action#_preview(' . string(s:prevfile) . ', 1, 1)')
+call win_gotoid(s:layout.viewer)
+call cursor(2, 1)
+if has('popupwin')
+  call calltree#action#help()
+  call s:check('preview ? lists the preview keys',
+        \ get(getbufline(winbufnr(get(popup_list(), 0, 0)), 1), 0, '') =~# '^<CR>')
+  call popup_close(get(popup_list(), 0, 0))
+endif
+call calltree#action#open_preview()
+call s:check('preview <CR> returns to the editing window',
+      \ win_getid() == s:origwin && tabpagenr() == 1)
+call s:check('preview <CR> keeps the preview line',
+      \ line('.') == 2
+      \ && resolve(expand('%:p')) ==# resolve(fnamemodify(s:prevfile, ':p')))
+call win_gotoid(s:layout.tree)
+tabclose
+unlet g:calltree_tab
 
 " Position conversion, the part every jump depends on.
 enew

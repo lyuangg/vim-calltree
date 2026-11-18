@@ -146,19 +146,27 @@ function! s:site_index(node) abort
   return max([0, get(a:node, 'site_idx', 0)]) % l:count
 endfunction
 
-" Show uri/range in the current window.
-function! s:reveal(uri, range) abort
-  let l:path = lsp#utils#uri_to_path(a:uri)
-  let l:bufnr = s:bufnr_for(l:path)
+" Edit `path` in the current window, reusing a loaded buffer when there is
+" one so unsaved changes are kept.
+function! s:switch_to(path) abort
+  let l:bufnr = s:bufnr_for(a:path)
   if l:bufnr == -1
-    execute 'silent keepalt hide edit ' . fnameescape(l:path)
+    execute 'silent keepalt hide edit ' . fnameescape(a:path)
   elseif l:bufnr != bufnr('%')
     execute 'silent keepalt hide buffer ' . l:bufnr
   endif
+endfunction
 
-  let [l:lnum, l:col] = lsp#utils#position#lsp_to_vim(bufnr('%'), a:range['start'])
-  call cursor(l:lnum, l:col)
+function! s:reveal_cursor(lnum, col) abort
+  call cursor(a:lnum, a:col)
   normal! zvzz
+endfunction
+
+" Show uri/range in the current window.
+function! s:reveal(uri, range) abort
+  call s:switch_to(lsp#utils#uri_to_path(a:uri))
+  let [l:lnum, l:col] = lsp#utils#position#lsp_to_vim(bufnr('%'), a:range['start'])
+  call s:reveal_cursor(l:lnum, l:col)
 endfunction
 
 " Router: ghost viewers (a scratch buffer in the tree tab) or, when the tree
@@ -316,12 +324,18 @@ function! calltree#action#_preview(path, lnum, col) abort
     " The viewer is read-only, so `q` would otherwise start recording a macro.
     " Leave the tree layout instead, like `q` does from the tree window.
     nnoremap <buffer> <silent> <Plug>(calltree-close) :<C-u>call calltree#action#close()<CR>
+    nnoremap <buffer> <silent> <Plug>(calltree-preview-open) :<C-u>call calltree#action#open_preview()<CR>
+    nnoremap <buffer> <silent> <Plug>(calltree-help) :<C-u>call calltree#action#help()<CR>
     if get(g:, 'calltree_default_maps', 1)
-      nmap <buffer> q <Plug>(calltree-close)
+      nmap <buffer> q  <Plug>(calltree-close)
+      nmap <buffer> <CR> <Plug>(calltree-preview-open)
+      nmap <buffer> ?  <Plug>(calltree-help)
     endif
   endif
 
   let l:path = fnamemodify(a:path, ':p')
+  " <CR> opens this file, so remember what the scratch copy stands for.
+  let b:calltree_preview_path = l:path
   let l:sig = s:preview_signature(l:path)
   if get(b:, 'calltree_preview_sig', '') !=# l:sig
     let l:lines = s:preview_lines(l:path)
@@ -336,6 +350,38 @@ function! calltree#action#_preview(path, lnum, col) abort
 
   call cursor(max([1, min([a:lnum, line('$')])]), a:col)
   normal! zz
+endfunction
+
+" The tree's ctx from the current tab: the preview buffer only carries the path
+" it was made from, not a copy of the tree state.
+function! s:tree_ctx() abort
+  for l:info in getwininfo()
+    if l:info['tabnr'] == tabpagenr() && getwinvar(l:info['winid'], 'calltree')
+      return getbufvar(l:info['bufnr'], 'calltree', {})
+    endif
+  endfor
+  return {}
+endfunction
+
+" <CR> in the preview window: open the real file at the line under the cursor,
+" in the window :CallTree was started from.  Same target as `e` in the tree,
+" but the position comes from the preview instead of a node.
+function! calltree#action#open_preview() abort
+  let l:path = get(b:, 'calltree_preview_path', '')
+  if empty(l:path) || !filereadable(l:path)
+    return s:err('no file to open')
+  endif
+
+  let l:lnum = line('.')
+  let l:col = col('.')
+  let l:openwin = get(s:tree_ctx(), 'openwin', 0)
+  if empty(l:openwin) || empty(win_id2tabwin(l:openwin)) || !win_gotoid(l:openwin)
+    " The editing window is gone: open a split next to the preview instead.
+    vertical rightbelow split
+  endif
+
+  call s:switch_to(l:path)
+  call s:reveal_cursor(l:lnum, l:col)
 endfunction
 
 function! s:preview_signature(path) abort
@@ -524,7 +570,7 @@ endfunction
 " than being derived from maparg(), because a <Plug> name does not tell you what
 " the default binding is, and g:calltree_default_maps may be off.
 
-let s:help_keys = [
+let s:help_keys_tree = [
       \ ['<CR>, o',  'expand / collapse the node under the cursor'],
       \ ['e',        'open the definition and leave the tree tab'],
       \ ['g<CR>',    'show the definition in the preview window'],
@@ -539,11 +585,22 @@ let s:help_keys = [
       \ ['?',        'show this help'],
       \ ]
 
+" The preview window is read-only, so it only offers the keys that make sense
+" there.
+let s:help_keys_preview = [
+      \ ['<CR>',     'open the file at the line under the cursor'],
+      \ ['q',        'close the tree tab'],
+      \ ['?',        'show this help'],
+      \ ]
+
 let s:help_popup = 0
 
 function! calltree#action#help() abort
+  let l:keys = get(b:, 'calltree_preview', 0)
+        \ ? s:help_keys_preview
+        \ : s:help_keys_tree
   if !has('popupwin')
-    for [l:key, l:desc] in s:help_keys
+    for [l:key, l:desc] in l:keys
       echomsg printf('%-8s %s', l:key, l:desc)
     endfor
     return
@@ -555,17 +612,17 @@ function! calltree#action#help() abort
   endif
 
   let l:keyw = 0
-  for [l:key, l:desc] in s:help_keys
+  for [l:key, l:desc] in l:keys
     let l:keyw = max([l:keyw, strdisplaywidth(l:key)])
   endfor
 
   let l:lines = []
-  let l:keys = []
+  let l:keylens = []
   let l:width = 0
-  for [l:key, l:desc] in s:help_keys
+  for [l:key, l:desc] in l:keys
     let l:line = l:key . repeat(' ', l:keyw - strdisplaywidth(l:key) + 2) . l:desc
     call add(l:lines, l:line)
-    call add(l:keys, strdisplaywidth(l:key))
+    call add(l:keylens, strdisplaywidth(l:key))
     let l:width = max([l:width, strdisplaywidth(l:line)])
   endfor
 
@@ -578,12 +635,15 @@ function! calltree#action#help() abort
   call setbufline(l:bufnr, 1, l:lines)
   call setbufvar(l:bufnr, '&modified', 0)
 
+  " prop_type_add refuses groups that do not exist yet, and help() can be
+  " called before plugin/calltree.vim was sourced (tests, lazy loaders).
+  call calltree#view#InitHighlights()
   if empty(prop_type_get('calltree_help_key', {'bufnr': l:bufnr}))
     call prop_type_add('calltree_help_key',
           \ {'bufnr': l:bufnr, 'highlight': 'CallTreeHelpKey'})
   endif
   let l:lnum = 0
-  for l:len in l:keys
+  for l:len in l:keylens
     let l:lnum += 1
     call prop_add(l:lnum, 1,
           \ {'type': 'calltree_help_key', 'length': l:len, 'bufnr': l:bufnr})

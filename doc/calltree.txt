@@ -49,6 +49,12 @@ Q        把当前可见节点导出到 quickfix。
 r        重新解析整棵树。
 q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
 
+预览窗口里只提供适合只读内容的键位：
+
+<CR>     在 :CallTree 启动时的编辑窗口打开该文件，并定位到光标所在行。
+q        关闭整个树 tab 页。
+?        在浮动窗口里显示预览窗口自己的键位。
+
 所有映射都通过 |<Plug>| 提供，设置 g:calltree_default_maps = 0 可禁用默认键位：
 
   <Plug>(calltree-open)
@@ -64,6 +70,7 @@ q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
   <Plug>(calltree-prev-site)
   <Plug>(calltree-quickfix)
   <Plug>(calltree-help)
+  <Plug>(calltree-preview-open)
 
 ==============================================================================
 3. 高亮                                                *calltree-highlight*

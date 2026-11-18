@@ -75,7 +75,7 @@ name alone. The workspace root is the nearest ancestor containing `.git` or
 
 ### Keys
 
-All mappings are buffer-local to the tree and available as `<Plug>`.
+All mappings are buffer-local and available as `<Plug>`.
 
 | Key | `<Plug>` | Action |
 | --- | --- | --- |
@@ -103,6 +103,10 @@ extension, so syntax highlighting is preserved.
 
 By default the preview shows the call site. Set `g:calltree_preview_site = 0`
 to show the definition instead.
+
+The preview window mirrors the file's line numbers, and it has its own keys:
+`<CR>` opens the file at the cursor line in the window `:CallTree` was run from,
+`q` closes the tree tab, and `?` shows the help for the preview window.
 
 ### Ordering
 
