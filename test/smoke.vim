@@ -127,6 +127,28 @@ let s:root['children'] = []
 call calltree#view#Render(bufnr('%'))
 call s:check('root collapse leaves one line', line('$') == 1)
 
+" d: prune a node from the view; its subtree goes with it, the root stays.
+enew
+setlocal buftype=nofile
+let s:droot = calltree#new_node(s:item, 'root')
+let s:droot['loaded'] = 1
+let s:droot['expanded'] = 1
+let s:dchild = calltree#new_node(s:child_item, 'in')
+let s:dchild['parent'] = s:droot
+let s:droot['children'] = [s:dchild]
+let b:calltree = {'gen': 3, 'bufnr': bufnr('%'), 'root': s:droot, 'index': {},
+      \ 'srcbufnr': bufnr('%'), 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
+call setbufvar(bufnr('%'), 'calltree_gen', 3)
+call calltree#view#Render(bufnr('%'))
+call s:check('tree renders root and child', line('$') == 2)
+call cursor(2, 1)
+call calltree#action#delete()
+call s:check('d removes the node line', line('$') == 1 && getline(1) =~# '● handle')
+call s:check('d drops the node from the index', !has_key(b:calltree_index, 2))
+call cursor(1, 1)
+call calltree#action#delete()
+call s:check('d refuses to delete the root', line('$') == 1 && s:droot['name'] ==# 'handle')
+
 " K: the floating definition shows the declaration range, hides itself as soon
 " as the tree cursor moves, and does not leak its scratch buffer.
 if has('popupwin')
@@ -221,6 +243,8 @@ enew
 call calltree#view#InitMaps()
 call s:check('? is mapped to the key help',
       \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
+call s:check('d is mapped to delete',
+      \ maparg('d', 'n') ==# '<Plug>(calltree-delete)')
 
 " The viewer buffer is read-only: q must leave the tree layout, not start a
 " macro recording.

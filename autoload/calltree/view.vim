@@ -90,6 +90,7 @@ function! calltree#view#InitMaps() abort
   nnoremap <buffer> <silent> <Plug>(calltree-prev-site) :<C-u>call calltree#action#cycle_site(-1)<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-quickfix)  :<C-u>call calltree#action#quickfix()<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-help)      :<C-u>call calltree#action#help()<CR>
+  nnoremap <buffer> <silent> <Plug>(calltree-delete)    :<C-u>call calltree#action#delete()<CR>
 
   if !get(g:, 'calltree_default_maps', 1)
     return
@@ -109,6 +110,7 @@ function! calltree#view#InitMaps() abort
   nmap <buffer> ]c     <Plug>(calltree-next-site)
   nmap <buffer> [c     <Plug>(calltree-prev-site)
   nmap <buffer> Q      <Plug>(calltree-quickfix)
+  nmap <buffer> d      <Plug>(calltree-delete)
   nmap <buffer> ?      <Plug>(calltree-help)
 
   augroup calltree_preview

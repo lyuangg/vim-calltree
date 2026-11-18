@@ -82,6 +82,7 @@ PHP 语言服务器通常不实现 Call Hierarchy。插件在服务器可用时�
 | `K` | `(calltree-float)` | 在浮动窗口中预览函数定义 |
 | `L` | `(calltree-expand-level)` | 将可见部分再展开一层 |
 | `]c`、`[c` | `(calltree-next-site)`、`(calltree-prev-site)` | 切换到下一个 / 上一个调用点 |
+| `d` | `(calltree-delete)` | 从树里删除该节点及其子树（仅视图，不改代码） |
 | `<BS>` | `(calltree-parent)` | 跳到父节点 |
 | `Q` | `(calltree-quickfix)` | 导出到 quickfix |
 | `?` | `(calltree-help)` | 在浮动窗口中显示键位帮助 |

@@ -103,6 +103,30 @@ function! s:any_loading(ctx) abort
   return 0
 endfunction
 
+" d prunes the node under the cursor.  The tree is a view over the call graph,
+" so removing a row drops that symbol (with everything below it) from this
+" tree; the source is untouched and r brings the node back.  The root stays:
+" an empty tree has nothing left to act on.
+function! calltree#action#delete() abort
+  let l:node = calltree#action#node()
+  if empty(l:node) || get(l:node, 'message', 0)
+    return
+  endif
+  let l:parent = get(l:node, 'parent', {})
+  if empty(l:parent)
+    return s:err('cannot delete the root of the tree')
+  endif
+  let l:idx = index(l:parent['children'], l:node)
+  if l:idx < 0
+    return
+  endif
+
+  call remove(l:parent['children'], l:idx)
+  " A group's count is derived on render, and Render rebuilds the index; the
+  " cursor lands on the nearest line because its node is gone.
+  call calltree#view#Render(b:calltree['bufnr'])
+endfunction
+
 function! calltree#action#parent() abort
   let l:node = calltree#action#node()
   if empty(l:node) || empty(l:node['parent'])
@@ -579,6 +603,7 @@ let s:help_keys_tree = [
       \ ['L',        'expand the whole visible tree by one level'],
       \ ['<BS>',     'move to the parent node'],
       \ [']c [c',    'next / previous call site of the node'],
+      \ ['d',        'remove the node and its subtree from the tree'],
       \ ['Q',        'export the visible nodes to the quickfix list'],
       \ ['r',        're-resolve the tree'],
       \ ['q',        'close the tree tab'],
