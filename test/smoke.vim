@@ -188,8 +188,39 @@ if has('popupwin')
   call s:check('any other key closes the popup',
         \ empty(popup_list()) && line('.') == 1)
   call s:check('the popup buffer is wiped', !bufloaded(s:pfbuf2))
+
+  " 'updatetime' expiry reaches the filter as the synthetic <CursorHold> key;
+  " reading a definition must not make it disappear.
+  call cursor(1, 1)
+  call calltree#action#float()
+  call feedkeys("\<CursorHold>", 'x')
+  call s:check('CursorHold does not close the definition float',
+        \ !empty(popup_list()))
+  call feedkeys('x', 'x')
+  call s:check('the definition float still closes on a real key',
+        \ empty(popup_list()))
+
+  " ?: the key help lists the bindings and dismisses itself on any key.
+  call calltree#action#help()
+  let s:helpwin = get(popup_list(), 0, 0)
+  call s:check('? opens the key help', s:helpwin != 0)
+  let s:helpbuf = winbufnr(s:helpwin)
+  call s:check('help lists the default keys',
+        \ get(getbufline(s:helpbuf, 1), 0, '') =~# '<CR>, o')
+  call s:check('help keys are highlighted',
+        \ !empty(prop_list(1, {'bufnr': s:helpbuf})))
+  call feedkeys("\<CursorHold>", 'x')
+  call s:check('CursorHold does not close the key help',
+        \ !empty(popup_list()))
+  call feedkeys('x', 'x')
+  call s:check('any key closes the key help', empty(popup_list()))
   unlet g:calltree_float_height
 endif
+
+enew
+call calltree#view#InitMaps()
+call s:check('? is mapped to the key help',
+      \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
 
 " The viewer buffer is read-only: q must leave the tree layout, not start a
 " macro recording.

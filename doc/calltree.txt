@@ -22,6 +22,7 @@ CONTENTS                                             *calltree-contents*
 :CallTreeRefresh    丢弃缓存，从当前位置重新解析。
 :CallTreeExpand     把当前可见的整棵树再展开一层（类似 fold 的 zr）。
 :CallTreeQF         把当前可见节点导出到 quickfix。
+:CallTreeHelp       在浮动窗口里显示树窗口的键位帮助（同 `?`）。
 :CallTreeClose      关闭树窗口。
 
 光标在树里移动时右侧窗口自动预览，默认定位到**调用点**（g:calltree_preview_site）。
@@ -44,6 +45,7 @@ L        整棵可见树再展开一层；作用范围是当前可见的所有�
 <BS>     跳到父节点所在行。
 ]c [c    同一函数的多个调用点之间循环。
 Q        把当前可见节点导出到 quickfix。
+?        在浮动窗口里显示键位帮助；再按 ? 或任意键关闭。
 r        重新解析整棵树。
 q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
 
@@ -61,6 +63,7 @@ q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
   <Plug>(calltree-next-site)
   <Plug>(calltree-prev-site)
   <Plug>(calltree-quickfix)
+  <Plug>(calltree-help)
 
 ==============================================================================
 3. 高亮                                                *calltree-highlight*
@@ -81,6 +84,7 @@ q        关闭整个树 tab 页（非 tab 模式则关闭树窗口）。
   CallTreeLocation  文件路径
   CallTreeLine      行号，默认链接 LineNr
   CallTreeMarker    展开/折叠标记，默认链接 NonText
+  CallTreeHelpKey   浮动帮助里的键位，加粗
   CallTreeError     错误文本，默认链接 ErrorMsg
 
 全部通过 `highlight default` 定义，可以在 vimrc 里重新定义其中任意一个来覆盖；

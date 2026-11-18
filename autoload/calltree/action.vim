@@ -465,6 +465,14 @@ function! s:float_open(node, path, first, body) abort
   let s:floats[l:id] = {'total': len(a:body)}
 endfunction
 
+" CursorHold is delivered to a popup filter as the synthetic <CursorHold> key
+" when 'updatetime' expires, with no user input at all.  Treating it like a
+" keypress would make a popup vanish while it is only being read, so it is
+" passed on to Vim (which triggers the CursorHold autocommands as usual).
+function! s:is_synthetic_key(key) abort
+  return a:key ==# "\<CursorHold>" || a:key ==# "\<CursorHoldI>"
+endfunction
+
 " Cursor keys keep working on the tree: the popup closes itself and the key
 " still reaches the tree, so the cursor (and the preview) moves on as usual.
 " "moved": "any" is the safety net for any other cursor movement.  Page keys
@@ -472,6 +480,9 @@ endfunction
 " after closing.  "mapping" is off on the popup so the tree's own mappings
 " cannot fire underneath it.
 function! s:float_filter(id, key) abort
+  if s:is_synthetic_key(a:key)
+    return 0
+  endif
   if a:key ==# 'j' || a:key ==# 'k' || a:key ==# "\<Down>" || a:key ==# "\<Up>"
         \ || a:key ==# "\<C-n>" || a:key ==# "\<C-p>"
     call popup_close(a:id)
@@ -503,6 +514,109 @@ function! s:float_closed(id, result) abort
   if has_key(s:floats, a:id)
     call remove(s:floats, a:id)
   endif
+endfunction
+
+" --- key help ---------------------------------------------------------------
+"
+" ? shows the tree's own keys in a floating window.  The list lives here rather
+" than being derived from maparg(), because a <Plug> name does not tell you what
+" the default binding is, and g:calltree_default_maps may be off.
+
+let s:help_keys = [
+      \ ['<CR>, o',  'expand / collapse the node under the cursor'],
+      \ ['e',        'open the definition and leave the tree tab'],
+      \ ['g<CR>',    'show the definition in the preview window'],
+      \ ['gs',       'show the call site in the preview window'],
+      \ ['K',        'peek at the definition in a floating window'],
+      \ ['L',        'expand the whole visible tree by one level'],
+      \ ['<BS>',     'move to the parent node'],
+      \ [']c [c',    'next / previous call site of the node'],
+      \ ['Q',        'export the visible nodes to the quickfix list'],
+      \ ['r',        're-resolve the tree'],
+      \ ['q',        'close the tree tab'],
+      \ ['?',        'show this help'],
+      \ ]
+
+let s:help_popup = 0
+
+function! calltree#action#help() abort
+  if !has('popupwin')
+    for [l:key, l:desc] in s:help_keys
+      echomsg printf('%-8s %s', l:key, l:desc)
+    endfor
+    return
+  endif
+  " Pressing ? on an open help closes it, like any other toggle.
+  if s:help_popup && !empty(popup_getpos(s:help_popup))
+    call popup_close(s:help_popup)
+    return
+  endif
+
+  let l:keyw = 0
+  for [l:key, l:desc] in s:help_keys
+    let l:keyw = max([l:keyw, strdisplaywidth(l:key)])
+  endfor
+
+  let l:lines = []
+  let l:keys = []
+  let l:width = 0
+  for [l:key, l:desc] in s:help_keys
+    let l:line = l:key . repeat(' ', l:keyw - strdisplaywidth(l:key) + 2) . l:desc
+    call add(l:lines, l:line)
+    call add(l:keys, strdisplaywidth(l:key))
+    let l:width = max([l:width, strdisplaywidth(l:line)])
+  endfor
+
+  let l:bufnr = bufadd('')
+  call bufload(l:bufnr)
+  call setbufvar(l:bufnr, '&buftype', 'nofile')
+  call setbufvar(l:bufnr, '&bufhidden', 'wipe')
+  call setbufvar(l:bufnr, '&swapfile', 0)
+  call setbufvar(l:bufnr, '&buflisted', 0)
+  call setbufline(l:bufnr, 1, l:lines)
+  call setbufvar(l:bufnr, '&modified', 0)
+
+  if empty(prop_type_get('calltree_help_key', {'bufnr': l:bufnr}))
+    call prop_type_add('calltree_help_key',
+          \ {'bufnr': l:bufnr, 'highlight': 'CallTreeHelpKey'})
+  endif
+  let l:lnum = 0
+  for l:len in l:keys
+    let l:lnum += 1
+    call prop_add(l:lnum, 1,
+          \ {'type': 'calltree_help_key', 'length': l:len, 'bufnr': l:bufnr})
+  endfor
+
+  let l:width = max([20, min([l:width + 2, &columns - 2])])
+  let s:help_popup = popup_create(l:bufnr, {
+        \ 'minwidth': l:width, 'maxwidth': l:width,
+        \ 'minheight': len(l:lines), 'maxheight': len(l:lines),
+        \ 'border': [], 'padding': [0, 2, 0, 2],
+        \ 'wrap': 0, 'zindex': 300, 'mapping': 0,
+        \ 'title': ' CallTree keys ',
+        \ 'filter': function('s:help_filter'),
+        \ 'callback': function('s:help_closed'),
+        \ })
+endfunction
+
+" Cursor keys dismiss the help and still move the tree underneath, so peeking
+" at the list does not cost a keypress; any other key is swallowed after
+" closing so that a help request cannot trigger a tree action by accident.
+function! s:help_filter(id, key) abort
+  if s:is_synthetic_key(a:key)
+    return 0
+  endif
+
+  call popup_close(a:id)
+  if a:key ==# 'j' || a:key ==# 'k' || a:key ==# "\<Down>" || a:key ==# "\<Up>"
+        \ || a:key ==# "\<C-n>" || a:key ==# "\<C-p>"
+    return 0
+  endif
+  return 1
+endfunction
+
+function! s:help_closed(id, result) abort
+  let s:help_popup = 0
 endfunction
 
 function! calltree#action#cycle_site(step) abort

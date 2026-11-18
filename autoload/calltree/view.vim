@@ -51,6 +51,7 @@ function! calltree#view#InitHighlights() abort
   execute 'highlight default CallTreeStdlib guifg=' . l:std[0] . ' ctermfg=' . l:std[1] . ' gui=italic cterm=italic'
   execute 'highlight default CallTreeExternal guifg=' . l:ext[0] . ' ctermfg=' . l:ext[1]
   execute 'highlight default CallTreeLocation guifg=' . l:dim[0] . ' ctermfg=' . l:dim[1]
+  execute 'highlight default CallTreeHelpKey guifg=' . l:callee[0] . ' ctermfg=' . l:callee[1] . ' gui=bold cterm=bold'
   highlight default link CallTreeMarker NonText
   highlight default link CallTreeLine   LineNr
   highlight default link CallTreeError  ErrorMsg
@@ -88,6 +89,7 @@ function! calltree#view#InitMaps() abort
   nnoremap <buffer> <silent> <Plug>(calltree-next-site) :<C-u>call calltree#action#cycle_site(1)<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-prev-site) :<C-u>call calltree#action#cycle_site(-1)<CR>
   nnoremap <buffer> <silent> <Plug>(calltree-quickfix)  :<C-u>call calltree#action#quickfix()<CR>
+  nnoremap <buffer> <silent> <Plug>(calltree-help)      :<C-u>call calltree#action#help()<CR>
 
   if !get(g:, 'calltree_default_maps', 1)
     return
@@ -107,6 +109,7 @@ function! calltree#view#InitMaps() abort
   nmap <buffer> ]c     <Plug>(calltree-next-site)
   nmap <buffer> [c     <Plug>(calltree-prev-site)
   nmap <buffer> Q      <Plug>(calltree-quickfix)
+  nmap <buffer> ?      <Plug>(calltree-help)
 
   augroup calltree_preview
     autocmd! * <buffer>

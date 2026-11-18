@@ -69,6 +69,7 @@ name alone. The workspace root is the nearest ancestor containing `.git` or
 | `:CallTreeCallees` | Same, callees only |
 | `:CallTreeExpand` | Expand the visible tree by one more level |
 | `:CallTreeQF` | Export the visible nodes to the quickfix list |
+| `:CallTreeHelp` | Show the key help in a floating window |
 | `:CallTreeRefresh` | Re-resolve from the position the tree was opened at |
 | `:CallTreeClose` | Close the tree tab |
 
@@ -87,6 +88,7 @@ All mappings are buffer-local to the tree and available as `<Plug>`.
 | `]c` / `[c` | `(calltree-next-site)` / `(calltree-prev-site)` | Next / previous call site of the node |
 | `<BS>` | `(calltree-parent)` | Move to the parent node |
 | `Q` | `(calltree-quickfix)` | Export to the quickfix list |
+| `?` | `(calltree-help)` | Show the key help in a floating window |
 | `r` | `(calltree-refresh)` | Re-resolve |
 | `q` | `(calltree-close)` | Close the tree tab |
 

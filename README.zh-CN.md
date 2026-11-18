@@ -65,6 +65,7 @@ PHP 语言服务器通常不实现 Call Hierarchy。插件在服务器可用时�
 | `:CallTreeCallees` | 仅显示被调用者 |
 | `:CallTreeExpand` | 将可见部分再展开一层 |
 | `:CallTreeQF` | 将可见节点导出到 quickfix |
+| `:CallTreeHelp` | 在浮动窗口中显示键位帮助 |
 | `:CallTreeRefresh` | 从打开时的位置重新解析 |
 | `:CallTreeClose` | 关闭树所在 tab |
 
@@ -83,6 +84,7 @@ PHP 语言服务器通常不实现 Call Hierarchy。插件在服务器可用时�
 | `]c`、`[c` | `(calltree-next-site)`、`(calltree-prev-site)` | 切换到下一个 / 上一个调用点 |
 | `<BS>` | `(calltree-parent)` | 跳到父节点 |
 | `Q` | `(calltree-quickfix)` | 导出到 quickfix |
+| `?` | `(calltree-help)` | 在浮动窗口中显示键位帮助 |
 | `r` | `(calltree-refresh)` | 重新解析 |
 | `q` | `(calltree-close)` | 关闭树所在 tab |
 
