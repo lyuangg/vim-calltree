@@ -308,7 +308,9 @@ endfunction
 function! calltree#action#_preview(path, lnum, col) abort
   if !exists('b:calltree_preview')
     setlocal buftype=nofile bufhidden=wipe noswapfile nobuflisted
-    setlocal nonumber norelativenumber nolist nowrap nospell
+    " Line numbers make it easy to relate the preview to the tree's :42
+    " suffix and to the file as it opens in an editor.
+    setlocal number norelativenumber nolist nowrap nospell
     let b:calltree_preview = 1
     let b:calltree_preview_sig = ''
     " The viewer is read-only, so `q` would otherwise start recording a macro.

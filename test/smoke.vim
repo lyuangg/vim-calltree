@@ -230,6 +230,8 @@ let s:prevfile = tempname()
 call writefile(['package x', 'func f() {}'], s:prevfile)
 call calltree#action#_preview(s:prevfile, 1, 1)
 call s:check('preview buffer shows the file', getline(1) ==# 'package x')
+call s:check('preview window shows line numbers',
+      \ &l:number && !&l:relativenumber)
 call s:check('preview buffer maps q to close the tree',
       \ maparg('q', 'n') ==# '<Plug>(calltree-close)')
 
