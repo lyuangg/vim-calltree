@@ -275,6 +275,26 @@ if has('popupwin')
         \ get(getbufline(s:pfbuf, 1), 0, '') ==# '// doc comment')
   call s:check('float caps its height', popup_getpos(s:pwin)['core_height'] == 6)
 
+  " <C-e>/<C-y> scroll the popup one line at a time without closing it.
+  call feedkeys("\<C-e>", 'x')
+  call s:check('<C-e> scrolls the float down a line',
+        \ get(popup_getpos(s:pwin), 'firstline', 0) == 2
+        \ && !empty(popup_list()))
+  call feedkeys("\<C-y>", 'x')
+  call s:check('<C-y> scrolls the float back up a line',
+        \ get(popup_getpos(s:pwin), 'firstline', 0) == 1
+        \ && !empty(popup_list()))
+
+  " J/K do the same inside the popup, where they do not reach the tree.
+  call feedkeys('J', 'x')
+  call s:check('J scrolls the float down a line',
+        \ get(popup_getpos(s:pwin), 'firstline', 0) == 2
+        \ && !empty(popup_list()))
+  call feedkeys('K', 'x')
+  call s:check('K scrolls the float back up a line',
+        \ get(popup_getpos(s:pwin), 'firstline', 0) == 1
+        \ && !empty(popup_list()))
+
   " Page keys page through a definition that does not fit.
   call feedkeys("\<C-d>", 'x')
   call s:check('page scrolling stays inside the popup',
@@ -329,13 +349,57 @@ call s:check('? is mapped to the key help',
       \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
 call s:check('dd is mapped to delete',
       \ maparg('dd', 'n') ==# '<Plug>(calltree-delete)')
+call s:check('J scrolls the preview down',
+      \ maparg('J', 'n') ==# '<Plug>(calltree-scroll-down)')
+call s:check('K scrolls the preview up',
+      \ maparg('K', 'n') ==# '<Plug>(calltree-scroll-up)')
+call s:check('gK shows the floating definition',
+      \ maparg('gK', 'n') ==# '<Plug>(calltree-float)')
+call s:check('gd opens the definition',
+      \ maparg('gd', 'n') ==# '<Plug>(calltree-definition)')
+
+" A definition range that only covers the name must not cut the body short:
+" for PHP the parser supplies the real extent of the declaration.
+if has('popupwin')
+  let s:phpfile = tempname() . '.php'
+  call writefile(['<?php', 'class X', '{', '    public function long()', '    {']
+        \ + map(range(1, 25), '"        $v" . v:val . " = " . v:val . ";"')
+        \ + ['    }', '}'], s:phpfile)
+  let s:degitem = {
+        \ 'name': 'long', 'kind': 12, 'uri': lsp#utils#path_to_uri(s:phpfile),
+        \ 'range': {'start': {'line': 3, 'character': 0},
+        \           'end': {'line': 3, 'character': 0}},
+        \ 'selectionRange': {'start': {'line': 3, 'character': 20},
+        \                     'end': {'line': 3, 'character': 24}},
+        \ }
+  let s:degnode = calltree#new_node(s:degitem, 'root')
+  let s:degnode['loaded'] = 1
+  enew
+  setlocal buftype=nofile
+  let b:calltree = {'gen': 9, 'bufnr': bufnr('%'), 'root': s:degnode,
+        \ 'index': {1: s:degnode}, 'srcbufnr': bufnr('%'),
+        \ 'srcwin': win_getid(), 'pos': {}, 'mode': 'both'}
+  let b:calltree_index = {1: s:degnode}
+  call calltree#action#float()
+  let s:degwin = get(popup_list(), 0, 0)
+  let s:deglines = getbufline(winbufnr(s:degwin), 1, '$')
+  let s:longdef = calltree#php#FindDef(
+        \ calltree#php#ParseFile(s:phpfile), 'long', 3, '')
+  call s:check('a name-only range still shows the whole declaration',
+        \ !empty(s:longdef)
+        \ && len(s:deglines) == s:longdef['end_line'] - s:longdef['start_line'] + 1
+        \ && get(s:deglines, 0, '') =~# 'public function long')
+  call popup_close(s:degwin)
+endif
 
 " The viewer buffer is read-only: q must leave the tree layout, not start a
 " macro recording.
 enew
 setlocal buftype=nofile
 let s:prevfile = tempname()
-call writefile(['package x', 'func f() {}'], s:prevfile)
+" Padding lines past the ones under test give J/K room to scroll.
+call writefile(['package x', 'func f() {}']
+      \ + map(range(1, 200), '"line " . v:val'), s:prevfile)
 call calltree#action#_preview(s:prevfile, 1, 1)
 call s:check('preview buffer shows the file', getline(1) ==# 'package x')
 call s:check('preview window shows line numbers',
@@ -344,6 +408,8 @@ call s:check('preview buffer maps q to close the tree',
       \ maparg('q', 'n') ==# '<Plug>(calltree-close)')
 call s:check('preview buffer maps <CR> to open the file',
       \ maparg('<CR>', 'n') ==# '<Plug>(calltree-preview-open)')
+call s:check('preview buffer maps gd to the definition',
+      \ maparg('gd', 'n') ==# '<Plug>(calltree-definition)')
 call s:check('preview buffer maps ? to the key help',
       \ maparg('?', 'n') ==# '<Plug>(calltree-help)')
 
@@ -375,12 +441,46 @@ if has('popupwin')
         \ get(getbufline(winbufnr(get(popup_list(), 0, 0)), 1), 0, '') =~# '^<CR>')
   call popup_close(get(popup_list(), 0, 0))
 endif
+
+" J/K scroll the viewer a line at a time and leave the tree cursor alone.
+" Only the down direction is checked: -es keeps the cursor on the window's top
+" line, which makes <C-y> a no-op here even though it works in a real Vim.
+call win_gotoid(s:layout.tree)
+let s:top = getwininfo(s:layout.viewer)[0]['topline']
+call calltree#action#scroll_preview(1)
+call s:check('J scrolls the preview down, tree focus stays put',
+      \ getwininfo(s:layout.viewer)[0]['topline'] == s:top + 1
+      \ && win_getid() == s:layout.tree)
+call win_gotoid(s:layout.viewer)
+call cursor(2, 1)
+
 call calltree#action#open_preview()
 call s:check('preview <CR> returns to the editing window',
       \ win_getid() == s:origwin && tabpagenr() == 1)
 call s:check('preview <CR> keeps the preview line',
       \ line('.') == 2
       \ && resolve(expand('%:p')) ==# resolve(fnamemodify(s:prevfile, ':p')))
+
+" gd in the tree: the node's definition in the window :CallTree was started
+" from, the same destination as e.  (The preview window's gd resolves the
+" symbol under the cursor and needs a language server; integration covers it.)
+let s:defitem = {
+      \ 'name': 'f', 'kind': 12, 'uri': lsp#utils#path_to_uri(s:prevfile),
+      \ 'range': {'start': {'line': 0, 'character': 0},
+      \           'end': {'line': 1, 'character': 11}},
+      \ 'selectionRange': {'start': {'line': 0, 'character': 0},
+      \                     'end': {'line': 0, 'character': 1}},
+      \ }
+let s:defnode = calltree#new_node(s:defitem, 'root')
+let s:defnode['loaded'] = 1
+call setbufvar(winbufnr(s:layout.tree), 'calltree_index', {1: s:defnode})
+call win_gotoid(s:layout.tree)
+call calltree#action#definition()
+call s:check('tree gd opens the node definition',
+      \ win_getid() == s:origwin && tabpagenr() == 1
+      \ && resolve(expand('%:p')) ==# resolve(fnamemodify(s:prevfile, ':p'))
+      \ && line('.') == 1)
+
 call win_gotoid(s:layout.tree)
 tabclose
 unlet g:calltree_tab

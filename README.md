@@ -81,9 +81,11 @@ All mappings are buffer-local and available as `<Plug>`.
 | --- | --- | --- |
 | `<CR>`, `o` | `(calltree-toggle)` | Expand or collapse the node under the cursor |
 | `e` | `(calltree-open)` | Open the file at its definition in the window `:CallTree` was run from |
+| `gd` | `(calltree-definition)` | Open a definition in the window `:CallTree` was run from: the node under the cursor in the tree (same as `e`), the symbol under the cursor in the preview |
 | `g<CR>` | `(calltree-jump)` | Show the definition in the preview window |
 | `gs` | `(calltree-jump-site)` | Show the call site in the preview window |
-| `K` | `(calltree-float)` | Show the definition in a floating window |
+| `J` / `K` | `(calltree-scroll-down)` / `(calltree-scroll-up)` | Scroll the preview window down / up a line |
+| `gK` | `(calltree-float)` | Show the definition in a floating window |
 | `L` | `(calltree-expand-level)` | Expand the visible tree by one level |
 | `]c` / `[c` | `(calltree-next-site)` / `(calltree-prev-site)` | Next / previous call site of the node |
 | `dd` | `(calltree-delete)` | Remove the node and its subtree from the tree (view only) |
@@ -107,7 +109,13 @@ to show the definition instead.
 
 The preview window mirrors the file's line numbers, and it has its own keys:
 `<CR>` opens the file at the cursor line in the window `:CallTree` was run from,
-`q` closes the tree tab, and `?` shows the help for the preview window.
+`gd` resolves the symbol under the preview cursor (a call you just read, for
+instance) and opens its definition in the window `:CallTree` was run from; `q`
+closes the tree tab, and `?` shows the help for the preview window.
+
+`J` and `K` in the tree scroll the preview window a line at a time, so you can
+read around the call site without moving the tree cursor. Moving the cursor to
+another node re-anchors the preview on that node again.
 
 ### Ordering
 
@@ -165,8 +173,8 @@ vimrc. They are reapplied on `ColorScheme` and on `:set background`.
 | `g:calltree_preview_site` | `1` | Preview the call site instead of the definition |
 | `g:calltree_preview_delay` | `60` | Preview debounce in milliseconds |
 | `g:calltree_preview_max_bytes` | `2097152` | Files larger than this are not previewed |
-| `g:calltree_float_height` | `20` | Maximum height of the `K` popup in lines; longer bodies page with `<C-d>`/`<C-u>` |
-| `g:calltree_float_width` | `100` | Maximum width of the `K` popup in cells |
+| `g:calltree_float_height` | `20` | Maximum height of the `gK` popup in lines; longer bodies scroll with `J`/`K` or `<C-e>`/`<C-y>`, and page with `<C-d>`/`<C-u>` |
+| `g:calltree_float_width` | `100` | Maximum width of the `gK` popup in cells |
 | `g:calltree_default_maps` | `1` | Install the default keys. `0` provides only `<Plug>` |
 | `g:calltree_guides` | `1` | Coloured tree connectors (`├─`, `└─`, `│`); `0` keeps plain indentation |
 | `g:calltree_php_provider` | `'auto'` | `'auto'` (server + search fallback), `'lsp'` (server only), `'search'` |

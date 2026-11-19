@@ -250,24 +250,25 @@ endfunction
 " One function can be called from several places; ]c / [c walk them.
  " --- open ------------------------------------------------------------------
 "
+" Focus the window :CallTree was invoked from, opening a split next to the
+" tree when it is gone (closed, or another tab was wiped).
+function! s:open_window(ctx) abort
+  let l:openwin = get(a:ctx, 'openwin', 0)
+  if empty(l:openwin) || empty(win_id2tabwin(l:openwin)) || !win_gotoid(l:openwin)
+    vertical rightbelow split
+  endif
+endfunction
+
 " e: open the node in the window :CallTree was invoked from and stay
 " there.  This is the "take me to the code" action, as opposed to preview and
 " g<CR>, which never leave the tree tab.
-
 function! calltree#action#open() abort
   let l:node = calltree#action#node()
   if empty(l:node) || get(l:node, 'message', 0) || empty(l:node['uri'])
     return
   endif
 
-  let l:ctx = get(b:, 'calltree', {})
-  let l:openwin = get(l:ctx, 'openwin', 0)
-  if empty(l:openwin) || empty(win_id2tabwin(l:openwin)) || !win_gotoid(l:openwin)
-    " The original window is gone (closed, or another tab was wiped): open a
-    " split next to the tree instead of failing.
-    vertical rightbelow split
-  endif
-
+  call s:open_window(get(b:, 'calltree', {}))
   call s:reveal(l:node['uri'], l:node['sel'])
 endfunction
 
@@ -351,10 +352,12 @@ function! calltree#action#_preview(path, lnum, col) abort
     " Leave the tree layout instead, like `q` does from the tree window.
     nnoremap <buffer> <silent> <Plug>(calltree-close) :<C-u>call calltree#action#close()<CR>
     nnoremap <buffer> <silent> <Plug>(calltree-preview-open) :<C-u>call calltree#action#open_preview()<CR>
+    nnoremap <buffer> <silent> <Plug>(calltree-definition) :<C-u>call calltree#action#definition()<CR>
     nnoremap <buffer> <silent> <Plug>(calltree-help) :<C-u>call calltree#action#help()<CR>
     if get(g:, 'calltree_default_maps', 1)
       nmap <buffer> q  <Plug>(calltree-close)
       nmap <buffer> <CR> <Plug>(calltree-preview-open)
+      nmap <buffer> gd <Plug>(calltree-definition)
       nmap <buffer> ?  <Plug>(calltree-help)
     endif
   endif
@@ -378,6 +381,37 @@ function! calltree#action#_preview(path, lnum, col) abort
   normal! zz
 endfunction
 
+" J/K: scroll the preview window a line at a time.  The tree cursor stays where
+" it is, so the code around the call site can be read without walking to a
+" neighbour node (which would re-anchor the preview with zz).
+function! calltree#action#scroll_preview(delta) abort
+  let l:win = calltree#view#ViewerWindow()
+  if !l:win
+    " Without a dedicated tab the preview is the window :CallTree came from.
+    let l:win = get(get(b:, 'calltree', {}), 'srcwin', 0)
+    if l:win == win_getid()
+      return
+    endif
+  endif
+  let l:info = get(getwininfo(l:win), 0, {})
+  if empty(l:info)
+    return
+  endif
+
+  " <C-e>/<C-y> beep at the ends of the buffer; stop quietly instead.
+  if a:delta > 0
+    if l:info['botline'] >= line('$', l:win)
+      return
+    endif
+    call win_execute(l:win, "normal! \<C-e>")
+  else
+    if l:info['topline'] <= 1
+      return
+    endif
+    call win_execute(l:win, "normal! \<C-y>")
+  endif
+endfunction
+
 " The tree's ctx from the current tab: the preview buffer only carries the path
 " it was made from, not a copy of the tree state.
 function! s:tree_ctx() abort
@@ -387,6 +421,102 @@ function! s:tree_ctx() abort
     endif
   endfor
   return {}
+endfunction
+
+" gd: open a definition in the window :CallTree was invoked from.  In the tree
+" that is the node under the cursor, the same destination as `e`.  In the
+" preview window it is whatever symbol the preview cursor is on: the viewer is
+" a copy of the file, so the provider can resolve a call you just read without
+" leaving the tree first.
+function! calltree#action#definition() abort
+  if get(b:, 'calltree_preview', 0)
+    return s:preview_definition()
+  endif
+
+  let l:node = calltree#action#node()
+  if empty(l:node) || get(l:node, 'message', 0) || empty(l:node['uri'])
+    return s:err('no definition to open')
+  endif
+
+  call s:open_window(get(b:, 'calltree', {}))
+  call s:reveal(l:node['uri'], l:node['sel'])
+endfunction
+
+" Providers answer requests through a real buffer, not the viewer's scratch
+" copy.  Use the file's buffer when it is already loaded; otherwise load a
+" hidden one for the duration of the request.
+function! s:request_bufnr(path) abort
+  let l:bufnr = s:bufnr_for(a:path)
+  if l:bufnr != -1
+    return [l:bufnr, 0]
+  endif
+  let l:bufnr = bufadd(a:path)
+  call bufload(l:bufnr)
+  call setbufvar(l:bufnr, '&buflisted', 0)
+  let l:ft = s:preview_filetype(a:path)
+  if !empty(l:ft)
+    call setbufvar(l:bufnr, '&filetype', l:ft)
+  endif
+  return [l:bufnr, 1]
+endfunction
+
+function! s:preview_definition() abort
+  let l:path = get(b:, 'calltree_preview_path', '')
+  if empty(l:path) || !filereadable(l:path)
+    return s:err('no file to resolve')
+  endif
+
+  let l:ctx = s:tree_ctx()
+  if empty(l:ctx)
+    return s:err('no call tree to jump from')
+  endif
+  let l:lnum = line('.')
+  let l:col = col('.')
+  let l:origin = bufnr('%')
+
+  " Pick the backend from the viewer's filetype, so a missing server fails
+  " before a hidden buffer is loaded.
+  let l:provider = calltree#provider#Choose(l:origin)
+  if empty(l:provider)
+    return s:err('no language server for ' . fnamemodify(l:path, ':t'))
+  endif
+  let l:server = ''
+  if l:provider ==# 'vimlsp' || l:provider ==# 'phplsp'
+    let l:server = calltree#provider#vimlsp#FindServer(l:origin)
+    if empty(l:server)
+      return s:err('no language server with definition support for '
+            \ . fnamemodify(l:path, ':t'))
+    endif
+  elseif l:provider ==# 'search' && !calltree#provider#search#Available()
+    return s:err('PHP search needs ripgrep (rg) or ag on $PATH')
+  endif
+
+  let [l:bufnr, l:temporary] = s:request_bufnr(l:path)
+  call calltree#provider#Prepare(l:provider, l:server, l:bufnr,
+        \ lsp#utils#position#vim_to_lsp(l:bufnr, [l:lnum, l:col]),
+        \ function('s:on_preview_definition', [l:ctx, l:origin, l:bufnr, l:temporary]))
+endfunction
+
+function! s:on_preview_definition(ctx, origin, bufnr, temporary, items, error) abort
+  let l:here = bufnr('%') == a:origin && getbufvar(a:origin, 'calltree_preview', 0)
+  if a:temporary && bufloaded(a:bufnr)
+    execute 'silent! bwipeout ' . a:bufnr
+  endif
+  " The user may have left the viewer while the server was answering.
+  if !l:here
+    return
+  endif
+  if !empty(a:error)
+    return s:err(a:error)
+  endif
+
+  let l:item = get(a:items, 0, {})
+  let l:sel = get(l:item, 'selectionRange', get(l:item, 'range', {}))
+  if empty(l:item) || empty(get(l:item, 'uri', '')) || empty(l:sel)
+    return s:err('no definition under the cursor')
+  endif
+  call s:open_window(a:ctx)
+  call s:reveal(l:item['uri'], l:sel)
 endfunction
 
 " <CR> in the preview window: open the real file at the line under the cursor,
@@ -459,6 +589,20 @@ endfunction
 
 let s:floats = {}
 
+" The declaration of `name` around 1-based line `lnum`, as [first, last], or []
+" when the PHP parser cannot help (non-PHP file, unparsable, name not found).
+function! s:php_declaration(path, name, lnum) abort
+  if tolower(fnamemodify(a:path, ':e')) !~# '^\%(php[345]\?\|phtml\)$'
+    return []
+  endif
+  let l:def = calltree#php#FindDef(calltree#php#ParseFile(a:path),
+        \ a:name, a:lnum - 1, '')
+  if empty(l:def)
+    return []
+  endif
+  return [l:def['start_line'] + 1, l:def['end_line'] + 1]
+endfunction
+
 function! calltree#action#float() abort
   let l:node = calltree#action#node()
   if empty(l:node) || l:node['group'] || get(l:node, 'message', 0) || empty(l:node['uri'])
@@ -476,8 +620,8 @@ function! calltree#action#float() abort
   endif
 
   " CallHierarchyItem.range covers the whole declaration (doc comment,
-  " signature, body).  Servers that only report the name get a few lines of
-  " context instead, which beats a one-line popup.
+  " signature, body).  Some servers answer a definition with just the name,
+  " which would cut the body short; the PHP parser knows the real extent.
   let l:first = l:node['sel']['start']['line'] + 1
   let l:last = l:first
   let l:range = get(l:node['item'], 'range', {})
@@ -487,8 +631,14 @@ function! calltree#action#float() abort
     let l:last = l:range['end']['line'] + 1
   endif
   if l:last <= l:first
-    let l:first = max([1, l:first - 2])
-    let l:last = l:first + 9
+    let l:decl = s:php_declaration(l:path, l:node['name'], l:first)
+    if !empty(l:decl)
+      let [l:first, l:last] = l:decl
+    else
+      " Unknown language: show enough context to fill and scroll the popup.
+      let l:first = max([1, l:first - 2])
+      let l:last = l:first + calltree#cfg('float_height', 20) + 9
+    endif
   endif
   let l:first = min([l:first, len(l:lines)])
   let l:last = min([l:last, l:first + 499, len(l:lines)])
@@ -549,10 +699,10 @@ endfunction
 
 " Cursor keys keep working on the tree: the popup closes itself and the key
 " still reaches the tree, so the cursor (and the preview) moves on as usual.
-" "moved": "any" is the safety net for any other cursor movement.  Page keys
-" page through a definition that does not fit, and any other key is swallowed
-" after closing.  "mapping" is off on the popup so the tree's own mappings
-" cannot fire underneath it.
+" "moved": "any" is the safety net for any other cursor movement.  The scroll
+" and page keys read through a definition that does not fit, and any other key
+" is swallowed after closing.  "mapping" is off on the popup so the tree's own
+" mappings (J/K scroll the preview) cannot fire underneath it.
 function! s:float_filter(id, key) abort
   if s:is_synthetic_key(a:key)
     return 0
@@ -564,7 +714,11 @@ function! s:float_filter(id, key) abort
   endif
 
   let l:step = 0
-  if a:key ==# "\<C-d>" || a:key ==# "\<PageDown>"
+  if a:key ==# 'J' || a:key ==# "\<C-e>"
+    let l:step = 1
+  elseif a:key ==# 'K' || a:key ==# "\<C-y>"
+    let l:step = -1
+  elseif a:key ==# "\<C-d>" || a:key ==# "\<PageDown>"
     let l:step = 10
   elseif a:key ==# "\<C-u>" || a:key ==# "\<PageUp>"
     let l:step = -10
@@ -598,10 +752,11 @@ endfunction
 
 let s:help_keys_tree = [
       \ ['<CR>, o',  'expand / collapse the node under the cursor'],
-      \ ['e',        'open the definition and leave the tree tab'],
+      \ ['e, gd',    'open the definition and leave the tree tab'],
       \ ['g<CR>',    'show the definition in the preview window'],
       \ ['gs',       'show the call site in the preview window'],
-      \ ['K',        'peek at the definition in a floating window'],
+      \ ['J, K',     'scroll the preview window down / up a line'],
+      \ ['gK',       'peek at the definition in a floating window'],
       \ ['L',        'expand the whole visible tree by one level'],
       \ ['<BS>',     'move to the parent node'],
       \ [']c [c',    'next / previous call site of the node'],
@@ -616,6 +771,7 @@ let s:help_keys_tree = [
 " there.
 let s:help_keys_preview = [
       \ ['<CR>',     'open the file at the line under the cursor'],
+      \ ['gd',       'open the definition of the symbol under the cursor'],
       \ ['q',        'close the tree tab'],
       \ ['?',        'show this help'],
       \ ]

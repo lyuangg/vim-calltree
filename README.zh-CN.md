@@ -77,9 +77,11 @@ PHP 语言服务器通常不实现 Call Hierarchy。插件在服务器可用时�
 | --- | --- | --- |
 | `<CR>`、`o` | `(calltree-toggle)` | 展开或折叠光标所在节点 |
 | `e` | `(calltree-open)` | 在执行 `:CallTree` 的窗口中打开该文件并定位到定义 |
+| `gd` | `(calltree-definition)` | 在执行 `:CallTree` 的窗口中打开定义：树里是光标所在节点（等同 `e`），预览窗口里是光标下的符号 |
 | `g<CR>` | `(calltree-jump)` | 在预览窗口显示函数定义 |
 | `gs` | `(calltree-jump-site)` | 在预览窗口显示调用点 |
-| `K` | `(calltree-float)` | 在浮动窗口中预览函数定义 |
+| `J` / `K` | `(calltree-scroll-down)` / `(calltree-scroll-up)` | 预览窗口向下 / 向上滚动一行 |
+| `gK` | `(calltree-float)` | 在浮动窗口中预览函数定义 |
 | `L` | `(calltree-expand-level)` | 将可见部分再展开一层 |
 | `]c`、`[c` | `(calltree-next-site)`、`(calltree-prev-site)` | 切换到下一个 / 上一个调用点 |
 | `dd` | `(calltree-delete)` | 从树里删除该节点及其子树（仅视图，不改代码） |
@@ -99,7 +101,12 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 默认预览调用点。设置 `g:calltree_preview_site = 0` 改为预览定义。
 
 预览窗口显示行号，并有自己的键位：`<CR>` 在 `:CallTree` 启动时的编辑窗口打开该
-文件并定位到光标所在行，`q` 关闭树 tab，`?` 显示预览窗口的键位帮助。
+文件并定位到光标所在行；`gd` 解析预览光标下的符号（比如刚读到的调用），在
+`:CallTree` 启动时的编辑窗口中打开它的定义；`q` 关闭树 tab；`?` 显示预览窗口的
+键位帮助。
+
+在树里按 `J` / `K` 可以把预览窗口向下 / 向上滚动一行，这样不用移动树光标也能读到
+调用点前后的代码；把光标移到别的节点时，预览会重新定位到那个节点。
 
 ### 排序
 
@@ -156,8 +163,8 @@ buffer 列表，也不会发送 `didOpen`。内容优先取自已加载的 buffe
 | `g:calltree_preview_site` | `1` | 预览调用点而非定义 |
 | `g:calltree_preview_delay` | `60` | 预览防抖，单位毫秒 |
 | `g:calltree_preview_max_bytes` | `2097152` | 超过该字节数的文件不预览内容 |
-| `g:calltree_float_height` | `20` | `K` 浮窗的最大高度（行），超出部分用 `<C-d>`/`<C-u>` 翻页 |
-| `g:calltree_float_width` | `100` | `K` 浮窗的最大宽度（单元格） |
+| `g:calltree_float_height` | `20` | `gK` 浮窗的最大高度（行），超出部分用 `J`/`K` 或 `<C-e>`/`<C-y>` 滚动、`<C-d>`/`<C-u>` 翻页 |
+| `g:calltree_float_width` | `100` | `gK` 浮窗的最大宽度（单元格） |
 | `g:calltree_default_maps` | `1` | 安装默认键位。`0` 仅提供 `<Plug>` |
 | `g:calltree_guides` | `1` | 彩色树状连接线（`├─`、`└─`、`│`）；`0` 保持纯空格缩进 |
 | `g:calltree_php_provider` | `'auto'` | `'auto'`（服务器 + 搜索兜底）、`'lsp'`（只用服务器）、`'search'` |

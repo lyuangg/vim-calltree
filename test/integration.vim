@@ -110,6 +110,20 @@ call cursor(search('▸ third'), 1)
 call calltree#action#preview()
 call writefile(['preview_third=' . getcurpos(s:srcwin)[1]], s:dir . '/preview.txt')
 
+" gd in the viewer resolves the symbol under the cursor, not the tree node:
+" with the cursor on third() it must open third's definition in the window
+" :CallTree was run from.
+call win_gotoid(s:srcwin)
+call cursor(search('_ = third()'), 6)
+call calltree#action#definition()
+let s:gd = 0
+while s:gd < 200 && tabpagenr() != 1
+  sleep 100m
+  let s:gd += 1
+endwhile
+call writefile(['tab=' . tabpagenr(), 'line=' . line('.'),
+      \ 'text=' . getline('.')], s:dir . '/preview-gd.txt')
+
 " q in the viewer window leaves the whole tree tab, exactly like q in the tree.
 let s:tabs = tabpagenr('$')
 call win_gotoid(s:srcwin)

@@ -88,6 +88,17 @@ grep -q 'func ordered() {' "$work/float.txt" || {
 grep -q '}' "$work/float.txt" || { echo "float popup missing the body end"; exit 1; }
 echo "float popup: ok"
 
+# gd in the preview window opens the definition of the call under the cursor
+grep -q '^tab=1$' "$work/preview-gd.txt" || {
+  echo "preview gd did not return to the editing window: $(cat "$work/preview-gd.txt" 2>/dev/null)"
+  exit 1
+}
+grep -q '^text=func third() int { return 3 }$' "$work/preview-gd.txt" || {
+  echo "preview gd landed on: $(cat "$work/preview-gd.txt" 2>/dev/null)"
+  exit 1
+}
+echo "preview gd: ok"
+
 # q in the preview window closes the tree tab
 grep -q '^qmap=<Plug>(calltree-close)' "$work/viewer-q.txt" || {
   echo "preview window q mapping: $(cat "$work/viewer-q.txt" 2>/dev/null)"
